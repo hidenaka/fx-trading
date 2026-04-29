@@ -3,12 +3,14 @@ from .base import Strategy
 from .ma_macd import MaMacdStrategy
 from .ma_cross import MaCrossStrategy
 from .dow_theory import DowTheoryStrategy
+from .stochastic import StochasticStrategy
 
 class StrategyFactory:
     _registry: Dict[str, Type[Strategy]] = {
         "ma_macd": MaMacdStrategy,
         "ma_cross": MaCrossStrategy,
         "dow_theory": DowTheoryStrategy,
+        "stochastic": StochasticStrategy,
     }
 
     @classmethod
