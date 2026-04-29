@@ -1,0 +1,22 @@
+from typing import Dict, Type, List
+from .base import Strategy
+from .ma_macd import MaMacdStrategy
+
+class StrategyFactory:
+    _registry: Dict[str, Type[Strategy]] = {
+        "ma_macd": MaMacdStrategy,
+    }
+
+    @classmethod
+    def available_strategies(cls) -> List[str]:
+        return list(cls._registry.keys())
+
+    @classmethod
+    def create(cls, name: str, **kwargs) -> Strategy:
+        if name not in cls._registry:
+            raise ValueError(f"Unknown strategy: {name}. Available: {cls.available_strategies()}")
+        return cls._registry[name](**kwargs)
+
+    @classmethod
+    def register(cls, name: str, strategy_class: Type[Strategy]):
+        cls._registry[name] = strategy_class
