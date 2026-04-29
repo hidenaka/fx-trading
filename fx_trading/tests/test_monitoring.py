@@ -1,5 +1,6 @@
 import os
 import tempfile
+from unittest.mock import patch, MagicMock
 from src.monitoring.logger import TradeLogger
 
 def test_logger_creates_log_file():
@@ -22,3 +23,17 @@ def test_logger_logs_error():
             content = f.read()
         assert "ERROR" in content
         assert "API connection failed" in content
+
+def test_logger_calls_slack_on_trade():
+    with patch("src.monitoring.logger.SlackNotifier") as mock_slack_class:
+        mock_slack = MagicMock()
+        mock_slack_class.return_value = mock_slack
+        logger = TradeLogger(log_file="/tmp/test_trades.log", slack_webhook_url="https://test")
+        logger.log_trade("USD_JPY", "BUY", 1000, 145.5)
+        mock_slack.notify_trade.assert_called_once()
+
+def test_logger_skips_slack_if_no_url():
+    with patch("src.monitoring.logger.SlackNotifier") as mock_slack_class:
+        logger = TradeLogger(log_file="/tmp/test_trades.log")
+        logger.log_trade("USD_JPY", "BUY", 1000, 145.5)
+        mock_slack_class.assert_not_called()
