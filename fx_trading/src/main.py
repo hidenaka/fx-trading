@@ -83,6 +83,65 @@ def run_live():
     results = runner.run_all_pairs()
     print(f"Trading cycle results: {results}")
 
+def run_batch_backtest():
+    from src.api.data_exporter import DataExporter
+    
+    loader = DataLoader(data_dir="data")
+    settings = Settings()
+    exporter = DataExporter(output_dir="dashboard/data")
+    all_results = []
+    
+    strategy_names = StrategyFactory.available_strategies()
+    
+    for pair in settings.currency_pairs:
+        print(f"\n=== Batch Backtest: {pair} ===")
+        try:
+            raw_df = loader.load_csv(pair.lower(), "1h")
+        except FileNotFoundError:
+            print(f"Data file for {pair} not found, skipping.")
+            continue
+        
+        pre = Preprocessor()
+        df = pre.process(raw_df)
+        
+        for name in strategy_names:
+            strategy = StrategyFactory.create(name)
+            risk = RiskManager(capital=settings.initial_capital, risk_per_trade=settings.risk_per_trade)
+            engine = BacktestEngine(initial_capital=settings.initial_capital)
+            trades = engine.run(df, strategy, risk)
+            
+            winning_trades = [t for t in trades if t.pnl and t.pnl > 0]
+            losing_trades = [t for t in trades if t.pnl and t.pnl <= 0]
+            
+            gross_profit = sum(t.pnl for t in winning_trades)
+            gross_loss = abs(sum(t.pnl for t in losing_trades))
+            profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0
+            win_rate = len(winning_trades) / len(trades) if trades else 0
+            
+            result = {
+                "pair": pair,
+                "strategy": name,
+                "total_trades": len(trades),
+                "win_rate": round(win_rate, 4),
+                "profit_factor": round(profit_factor, 4),
+                "final_capital": round(engine.capital, 2),
+            }
+            all_results.append(result)
+            print(f"{name:20s} | Trades: {result['total_trades']:3d} | Win Rate: {result['win_rate']:.2%} | PF: {result['profit_factor']:.2f} | Capital: ¥{result['final_capital']:,.0f}")
+    
+    exporter.export_backtest_result("batch", {
+        "results": all_results,
+        "timestamp": pd.Timestamp.now().isoformat(),
+    })
+    print(f"\nBatch backtest results saved to dashboard/data/")
+    
+    # Summary table
+    print("\n=== Batch Backtest Summary ===")
+    print(f"{'Pair':<12} {'Strategy':<15} {'Trades':>6} {'Win%':>8} {'PF':>8} {'Capital':>15}")
+    print("-" * 65)
+    for r in all_results:
+        print(f"{r['pair']:<12} {r['strategy']:<15} {r['total_trades']:>6} {r['win_rate']:>7.1%} {r['profit_factor']:>8.2f} ¥{r['final_capital']:>13,.0f}")
+
 def main():
     parser = argparse.ArgumentParser(description="FX Auto Trading System")
     parser.add_argument("--live", action="store_true", help="Run in live trading mode")
