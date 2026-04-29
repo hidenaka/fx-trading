@@ -73,3 +73,67 @@ def test_trainer_evaluates_model():
     metrics = trainer.evaluate(X, y)
     assert "accuracy" in metrics
     assert 0 <= metrics["accuracy"] <= 1
+
+def test_feature_engineer_has_macd_features():
+    df = pd.DataFrame({
+        "datetime": pd.date_range("2024-01-01", periods=50, freq="h"),
+        "open": np.random.randn(50).cumsum() + 150,
+        "high": np.random.randn(50).cumsum() + 151,
+        "low": np.random.randn(50).cumsum() + 149,
+        "close": np.random.randn(50).cumsum() + 150,
+        "volume": np.random.randint(1000, 2000, 50),
+    })
+    fe = FeatureEngineer()
+    X, y = fe.prepare(df)
+    assert "macd_hist" in X.columns
+    assert X["macd_hist"].notna().sum() > 0
+
+def test_feature_engineer_has_bollinger_bands():
+    df = pd.DataFrame({
+        "datetime": pd.date_range("2024-01-01", periods=50, freq="h"),
+        "open": np.random.randn(50).cumsum() + 150,
+        "high": np.random.randn(50).cumsum() + 151,
+        "low": np.random.randn(50).cumsum() + 149,
+        "close": np.random.randn(50).cumsum() + 150,
+        "volume": np.random.randint(1000, 2000, 50),
+    })
+    fe = FeatureEngineer()
+    X, y = fe.prepare(df)
+    for col in ["bb_upper_1", "bb_lower_1", "bb_upper_2", "bb_lower_2"]:
+        assert col in X.columns
+    # Verify band ordering
+    valid = X.dropna()
+    assert (valid["bb_upper_2"] >= valid["bb_upper_1"]).all()
+    assert (valid["bb_upper_1"] >= valid["bb_lower_1"]).all()
+    assert (valid["bb_lower_1"] >= valid["bb_lower_2"]).all()
+
+def test_feature_engineer_has_atr():
+    df = pd.DataFrame({
+        "datetime": pd.date_range("2024-01-01", periods=50, freq="h"),
+        "open": np.random.randn(50).cumsum() + 150,
+        "high": np.random.randn(50).cumsum() + 151,
+        "low": np.random.randn(50).cumsum() + 149,
+        "close": np.random.randn(50).cumsum() + 150,
+        "volume": np.random.randint(1000, 2000, 50),
+    })
+    fe = FeatureEngineer()
+    X, y = fe.prepare(df)
+    assert "atr_14" in X.columns
+    assert (X["atr_14"] >= 0).all()
+
+def test_feature_engineer_has_pattern_features():
+    # Create a doji: open == close
+    df = pd.DataFrame({
+        "datetime": pd.date_range("2024-01-01", periods=50, freq="h"),
+        "open": [150.0] * 50,
+        "high": [151.0] * 50,
+        "low": [149.0] * 50,
+        "close": [150.0] * 50,
+        "volume": [1000] * 50,
+    })
+    fe = FeatureEngineer()
+    X, y = fe.prepare(df)
+    assert "doji" in X.columns
+    assert "hammer" in X.columns
+    # With open == close and range > 0, doji should be 1
+    assert (X["doji"] == 1).all()
