@@ -28,7 +28,8 @@ class PollingRunner:
             initial_capital=self.config.initial_capital,
         )
         self.logger = TradeLogger()
-        self.order_builder = OrderBuilder(instrument=self.config.currency_pair)
+        default_instrument = getattr(self.config, "currency_pair", None) or self.config.currency_pairs[0]
+        self.order_builder = OrderBuilder(instrument=default_instrument)
         self.risk_manager = RiskManager(
             capital=self.config.initial_capital,
             risk_per_trade=self.config.risk_per_trade,
@@ -63,7 +64,8 @@ class PollingRunner:
         else:
             return 0
 
-    def run_cycle(self) -> bool:
+    def run_cycle(self, pair: Optional[str] = None) -> bool:
+        instrument = pair or getattr(self.config, "currency_pair", None) or self.config.currency_pairs[0]
         now = datetime.datetime.now()
         
         # 1. Check circuit breaker
@@ -73,8 +75,11 @@ class PollingRunner:
         
         try:
             # 2. Get current price and positions
-            price = self.client.get_current_price(self.config.currency_pair)
+            price = self.client.get_current_price(instrument)
             positions = self.client.get_open_positions()
+            
+            # Filter positions for this instrument
+            pair_positions = [p for p in positions if p.get("instrument") == instrument]
             
             # 3. Build minimal dataframe for signal generation
             import pandas as pd
@@ -90,8 +95,13 @@ class PollingRunner:
             # 4. Generate signals from all strategies and aggregate
             signal = self._aggregate_signals(df)
             
+            # Use pair-specific order builder if needed
+            order_builder = self.order_builder
+            if pair and pair != getattr(self.config, "currency_pair", None):
+                order_builder = OrderBuilder(instrument=pair)
+            
             # 5. Check positions and act
-            if not positions:
+            if not pair_positions:
                 # No position - check entry signal
                 if signal != 0:
                     entry_price = price["ask"] if signal == 1 else price["bid"]
@@ -100,7 +110,7 @@ class PollingRunner:
                     units = int(self.risk_manager.calculate_lot(entry_price, stop_loss))
                     
                     if units > 0:
-                        order = self.order_builder.build_market_order(
+                        order = order_builder.build_market_order(
                             direction=signal,
                             units=units,
                             stop_loss=stop_loss,
@@ -108,7 +118,7 @@ class PollingRunner:
                         )
                         result = self.client.place_order(order)
                         self.logger.log_trade(
-                            self.config.currency_pair,
+                            instrument,
                             "BUY" if signal == 1 else "SELL",
                             units,
                             entry_price,
@@ -116,16 +126,16 @@ class PollingRunner:
                         self.logger.log_info(f"Order placed: {result}")
             else:
                 # Have position - check exit signal
-                current_pos = positions[0]
+                current_pos = pair_positions[0]
                 long_units = float(current_pos.get("long", {}).get("units", 0))
                 short_units = float(current_pos.get("short", {}).get("units", 0))
                 current_direction = 1 if long_units > 0 else -1 if short_units < 0 else 0
                 
                 # Exit if signal changes direction
                 if signal != 0 and signal != current_direction:
-                    self.client.close_position(self.config.currency_pair)
+                    self.client.close_position(instrument)
                     self.logger.log_trade(
-                        self.config.currency_pair,
+                        instrument,
                         "CLOSE",
                         0,
                         price["bid"] if current_direction == 1 else price["ask"],
@@ -136,3 +146,9 @@ class PollingRunner:
         except Exception as e:
             self.logger.log_error(f"Error in trading cycle: {e}")
             return False
+    
+    def run_all_pairs(self) -> dict:
+        results = {}
+        for pair in self.config.currency_pairs:
+            results[pair] = self.run_cycle(pair=pair)
+        return results

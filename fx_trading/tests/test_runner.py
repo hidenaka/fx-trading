@@ -75,3 +75,28 @@ def test_runner_aggregates_signals(mock_client_class):
 
     signal = runner._aggregate_signals(df)
     assert signal == 1
+
+def test_runner_processes_multiple_pairs():
+    from unittest.mock import MagicMock, patch
+    mock_config = MagicMock()
+    mock_config.currency_pairs = ["USD_JPY", "EUR_USD"]
+    mock_config.risk_per_trade = 0.01
+    mock_config.api_token = "test"
+    mock_config.account_id = "acc"
+    mock_config.environment = "practice"
+    mock_config.slack_webhook_url = None
+    
+    with patch("src.runner.polling_runner.OandaClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client.get_multiple_prices.return_value = {
+            "USD_JPY": {"bid": 145.0, "ask": 145.02},
+            "EUR_USD": {"bid": 1.085, "ask": 1.0852},
+        }
+        mock_client.get_open_positions.return_value = []
+        mock_client_class.return_value = mock_client
+        
+        runner = PollingRunner(config=mock_config)
+        results = runner.run_all_pairs()
+        assert len(results) == 2
+        assert "USD_JPY" in results
+        assert "EUR_USD" in results
