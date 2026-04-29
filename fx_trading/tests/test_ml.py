@@ -137,3 +137,22 @@ def test_feature_engineer_has_pattern_features():
     assert "hammer" in X.columns
     # With open == close and range > 0, doji should be 1
     assert (X["doji"] == 1).all()
+
+def test_trainer_grid_search():
+    np.random.seed(42)
+    df = pd.DataFrame({
+        "datetime": pd.date_range("2024-01-01", periods=100, freq="h"),
+        "open": np.random.randn(100).cumsum() + 150,
+        "high": np.random.randn(100).cumsum() + 151,
+        "low": np.random.randn(100).cumsum() + 149,
+        "close": np.random.randn(100).cumsum() + 150,
+        "volume": np.random.randint(1000, 2000, 100),
+    })
+    fe = FeatureEngineer()
+    X, y = fe.prepare(df)
+
+    trainer = MLTrainer(model_type="logistic_regression")
+    model, best_params = trainer.train_with_grid_search(X, y)
+    assert model is not None
+    assert "C" in best_params
+    assert trainer.model is model
