@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import List
+from typing import List, Optional
 from dataclasses import dataclass, field
 
 
@@ -15,10 +15,12 @@ class Trade:
 
 
 class BacktestEngine:
-    def __init__(self, initial_capital: float = 1_000_000):
+    def __init__(self, initial_capital: float = 1_000_000, mode: str = "backtest", broker=None):
         self.initial_capital = initial_capital
         self.capital = initial_capital
         self.trades: List[Trade] = []
+        self.mode = mode
+        self.broker = broker
 
     def run(self, df: pd.DataFrame, strategy, risk_manager):
         df = strategy.generate_signals(df)
@@ -27,6 +29,20 @@ class BacktestEngine:
 
         for i in range(1, len(df)):
             row = df.iloc[i]
+            
+            if self.mode == "live" and self.broker is not None:
+                # In live mode, check broker for actual position
+                open_positions = self.broker.get_open_positions()
+                # Simplified: if we have open positions, set position accordingly
+                if open_positions:
+                    pos = open_positions[0]
+                    if float(pos.get("long", {}).get("units", 0)) > 0:
+                        position = 1
+                    elif float(pos.get("short", {}).get("units", 0)) < 0:
+                        position = -1
+                else:
+                    position = 0
+            
             if position == 0 and row["signal"] != 0:
                 direction = int(row["signal"])
                 stop = row["close"] * 0.99 if direction == 1 else row["close"] * 1.01
