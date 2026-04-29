@@ -1,10 +1,12 @@
 from typing import Dict, Type, List
 from .base import Strategy
 from .ma_macd import MaMacdStrategy
+from .ma_cross import MaCrossStrategy
 
 class StrategyFactory:
     _registry: Dict[str, Type[Strategy]] = {
         "ma_macd": MaMacdStrategy,
+        "ma_cross": MaCrossStrategy,
     }
 
     @classmethod
