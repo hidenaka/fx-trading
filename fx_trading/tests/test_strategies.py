@@ -135,3 +135,36 @@ def test_stochastic_oversold_buy_signal():
     # Last row should have some signal
     assert "stoch_k" in result.columns
     assert "stoch_d" in result.columns
+
+
+import pandas as pd
+import numpy as np
+from src.ml.strategy import MLStrategy
+from src.ml.trainer import MLTrainer
+from src.ml.feature_engineer import FeatureEngineer
+
+def test_ml_strategy_generates_signals():
+    np.random.seed(42)
+    df = pd.DataFrame({
+        "datetime": pd.date_range("2024-01-01", periods=100, freq="h"),
+        "open": np.random.randn(100).cumsum() + 150,
+        "high": np.random.randn(100).cumsum() + 151,
+        "low": np.random.randn(100).cumsum() + 149,
+        "close": np.random.randn(100).cumsum() + 150,
+        "volume": np.random.randint(1000, 2000, 100),
+    })
+    
+    fe = FeatureEngineer()
+    X, y = fe.prepare(df)
+    
+    trainer = MLTrainer()
+    model = trainer.train(X, y)
+    
+    strategy = MLStrategy(model=model)
+    result = strategy.generate_signals(df)
+    assert "signal" in result.columns
+    assert set(result["signal"].unique()).issubset({-1, 0, 1})
+
+def test_factory_creates_ml_strategy():
+    from src.strategies.factory import StrategyFactory
+    assert "ml_strategy" in StrategyFactory.available_strategies()
