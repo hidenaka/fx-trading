@@ -44,3 +44,25 @@ def test_get_account_summary_raises_on_error():
         client = OandaClient(api_token="bad", account_id="acc123", environment="practice")
         with pytest.raises(RuntimeError):
             client.get_account_summary()
+
+from src.broker.order_builder import OrderBuilder
+
+def test_build_market_order_long():
+    builder = OrderBuilder(instrument="USD_JPY")
+    order = builder.build_market_order(direction=1, units=1000, stop_loss=145.0, take_profit=147.0)
+    assert order["type"] == "MARKET"
+    assert order["instrument"] == "USD_JPY"
+    assert order["units"] == "1000"
+    assert order["stopLossOnFill"]["price"] == "145.00"
+    assert order["takeProfitOnFill"]["price"] == "147.00"
+
+def test_build_market_order_short():
+    builder = OrderBuilder(instrument="USD_JPY")
+    order = builder.build_market_order(direction=-1, units=1000, stop_loss=147.0, take_profit=145.0)
+    assert order["units"] == "-1000"
+
+def test_build_market_order_without_stop():
+    builder = OrderBuilder(instrument="USD_JPY")
+    order = builder.build_market_order(direction=1, units=500)
+    assert "stopLossOnFill" not in order
+    assert "takeProfitOnFill" not in order
