@@ -87,10 +87,24 @@ def main():
     parser = argparse.ArgumentParser(description="FX Auto Trading System")
     parser.add_argument("--live", action="store_true", help="Run in live trading mode")
     parser.add_argument("--backtest", action="store_true", help="Run backtest (default)")
+    parser.add_argument("--fetch-data", action="store_true", help="Fetch historical data from OANDA")
+    parser.add_argument("--batch-backtest", action="store_true", help="Run batch backtest for all pairs and strategies")
     args = parser.parse_args()
 
     if args.live:
         run_live()
+    elif args.fetch_data:
+        from src.data.oanda_fetcher import OandaDataFetcher
+        from src.config.settings import Settings
+        settings = Settings()
+        fetcher = OandaDataFetcher(api_token=settings.api_token, environment=settings.environment)
+        for pair in settings.currency_pairs:
+            output_file = f"data/{pair.lower()}_{settings.granularity.lower()}.csv"
+            print(f"Fetching {pair}...")
+            fetcher.fetch_to_csv(pair, output_file, granularity=settings.granularity, count=5000)
+            print(f"Saved to {output_file}")
+    elif args.batch_backtest:
+        run_batch_backtest()
     else:
         run_backtest()
 
