@@ -1,0 +1,103 @@
+async function loadData() {
+    try {
+        // Try to load from API first, fallback to local JSON
+        const portfolio = await fetchData('portfolio.json');
+        const equity = await fetchData('equity_curve.json');
+        const backtest = await fetchLatestBacktest();
+        
+        updateDashboard(portfolio, equity, backtest);
+    } catch (e) {
+        console.error('Failed to load data:', e);
+        document.getElementById('capital').textContent = 'No Data';
+    }
+}
+
+async function fetchData(filename) {
+    try {
+        const response = await fetch(`http://localhost:8000/${filename}`);
+        if (response.ok) return await response.json();
+    } catch (e) {}
+    // Fallback to local file
+    const response = await fetch(`data/${filename}`);
+    return await response.json();
+}
+
+async function fetchLatestBacktest() {
+    // For now, return null - in real use, scan for latest backtest file
+    return null;
+}
+
+function updateDashboard(portfolio, equity, backtest) {
+    if (portfolio) {
+        document.getElementById('capital').textContent = 
+            portfolio.capital ? `¥${portfolio.capital.toLocaleString()}` : '-';
+        document.getElementById('daily-pnl').textContent = 
+            portfolio.daily_pnl ? `${portfolio.daily_pnl > 0 ? '+' : ''}${portfolio.daily_pnl.toLocaleString()}` : '-';
+        document.getElementById('daily-pnl').className = 
+            `text-2xl font-bold ${portfolio.daily_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
+        
+        // Update positions table
+        const tbody = document.getElementById('positions-table');
+        tbody.innerHTML = '';
+        if (portfolio.positions) {
+            portfolio.positions.forEach(pos => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-700';
+                row.innerHTML = `
+                    <td class="py-2">${pos.instrument}</td>
+                    <td class="py-2 ${pos.units > 0 ? 'text-green-400' : 'text-red-400'}">${pos.units > 0 ? 'LONG' : 'SHORT'}</td>
+                    <td class="py-2">${Math.abs(pos.units)}</td>
+                    <td class="py-2">${pos.entry_price || '-'}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+    }
+    
+    if (equity && equity.length > 0) {
+        renderEquityChart(equity);
+    }
+    
+    if (backtest) {
+        document.getElementById('win-rate').textContent = 
+            backtest.win_rate ? `${(backtest.win_rate * 100).toFixed(1)}%` : '-';
+    }
+}
+
+function renderEquityChart(equityData) {
+    const ctx = document.getElementById('equity-chart').getContext('2d');
+    const labels = equityData.map((_, i) => i);
+    const data = equityData.map(d => d.capital || d);
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Capital',
+                data: data,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                fill: true,
+                tension: 0.4,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: { display: false },
+                y: { 
+                    grid: { color: '#334155' },
+                    ticks: { color: '#94a3b8' }
+                }
+            }
+        }
+    });
+}
+
+// Load data on page load and refresh every 30 seconds
+loadData();
+setInterval(loadData, 30000);

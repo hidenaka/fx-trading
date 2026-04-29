@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FX Auto Trading Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; }
+        .card { background-color: #1e293b; border-radius: 0.5rem; padding: 1rem; }
+    </style>
+</head>
+<body class="p-4">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6 text-center">FX Auto Trading Dashboard</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="card">
+                <h2 class="text-lg font-semibold text-gray-400">Total Capital</h2>
+                <p id="capital" class="text-2xl font-bold text-green-400">-</p>
+            </div>
+            <div class="card">
+                <h2 class="text-lg font-semibold text-gray-400">Daily P&L</h2>
+                <p id="daily-pnl" class="text-2xl font-bold">-</p>
+            </div>
+            <div class="card">
+                <h2 class="text-lg font-semibold text-gray-400">Win Rate</h2>
+                <p id="win-rate" class="text-2xl font-bold text-blue-400">-</p>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="card">
+                <h2 class="text-lg font-semibold mb-4">Equity Curve</h2>
+                <canvas id="equity-chart"></canvas>
+            </div>
+            <div class="card">
+                <h2 class="text-lg font-semibold mb-4">Strategy Ranking</h2>
+                <div id="strategy-list"></div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2 class="text-lg font-semibold mb-4">Open Positions</h2>
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="text-gray-400 border-b border-gray-700">
+                        <th class="pb-2">Pair</th>
+                        <th class="pb-2">Direction</th>
+                        <th class="pb-2">Units</th>
+                        <th class="pb-2">Entry Price</th>
+                    </tr>
+                </thead>
+                <tbody id="positions-table"></tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
