@@ -1,15 +1,20 @@
 import datetime
-from typing import Optional
+from typing import Optional, List, Union
 from src.config.settings import Settings
 from src.broker.oanda_client import OandaClient
 from src.broker.order_builder import OrderBuilder
 from src.risk.manager import RiskManager
-from src.strategies.ma_macd import MaMacdStrategy
+from src.strategies.factory import StrategyFactory
+from src.strategies.base import Strategy
 from src.safety.circuit_breaker import CircuitBreaker
 from src.monitoring.logger import TradeLogger
 
 class PollingRunner:
-    def __init__(self, config: Optional[Settings] = None):
+    def __init__(
+        self,
+        config: Optional[Settings] = None,
+        strategies: Optional[List[Union[str, Strategy]]] = None,
+    ):
         self.config = config or Settings()
         self.client = OandaClient(
             api_token=self.config.api_token,
@@ -28,7 +33,35 @@ class PollingRunner:
             capital=self.config.initial_capital,
             risk_per_trade=self.config.risk_per_trade,
         )
-        self.strategy = MaMacdStrategy(fast=3, slow=6, signal=2)
+
+        if strategies is None:
+            strategies = ["ma_macd"]
+
+        self.strategies: List[Strategy] = []
+        for s in strategies:
+            if isinstance(s, str):
+                self.strategies.append(StrategyFactory.create(s))
+            else:
+                self.strategies.append(s)
+
+    def _aggregate_signals(self, df) -> int:
+        """Aggregate signals from all strategies by majority vote."""
+        signals = []
+        for strategy in self.strategies:
+            sig_df = strategy.generate_signals(df.copy())
+            signal = int(sig_df.iloc[-1]["signal"])
+            signals.append(signal)
+
+        buy_votes = sum(1 for s in signals if s == 1)
+        sell_votes = sum(1 for s in signals if s == -1)
+        neutral_votes = sum(1 for s in signals if s == 0)
+
+        if buy_votes > sell_votes and buy_votes > neutral_votes:
+            return 1
+        elif sell_votes > buy_votes and sell_votes > neutral_votes:
+            return -1
+        else:
+            return 0
 
     def run_cycle(self) -> bool:
         now = datetime.datetime.now()
@@ -54,9 +87,8 @@ class PollingRunner:
                 "volume": [1],
             })
             
-            # 4. Generate signals (in real system, we'd fetch more history)
-            df = self.strategy.generate_signals(df)
-            signal = int(df.iloc[-1]["signal"])
+            # 4. Generate signals from all strategies and aggregate
+            signal = self._aggregate_signals(df)
             
             # 5. Check positions and act
             if not positions:

@@ -1,9 +1,10 @@
 import logging
 import os
 from datetime import datetime
+from src.monitoring.slack import SlackNotifier
 
 class TradeLogger:
-    def __init__(self, log_file: str = "logs/trades.log", error_file: str = None):
+    def __init__(self, log_file: str = "logs/trades.log", error_file: str = None, slack_webhook_url: str = None):
         if error_file is None:
             error_file = log_file
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
@@ -23,11 +24,22 @@ class TradeLogger:
         handler.setFormatter(logging.Formatter("%(asctime)s | ERROR | %(message)s"))
         self.error_logger.addHandler(handler)
 
+        if slack_webhook_url:
+            self.slack = SlackNotifier(slack_webhook_url)
+        else:
+            self.slack = None
+
     def log_trade(self, instrument: str, direction: str, units: int, price: float):
         self.trade_logger.info(f"TRADE | {instrument} | {direction} | units={units} | price={price}")
+        if self.slack:
+            self.slack.notify_trade(instrument, direction, units, price)
 
     def log_error(self, message: str):
         self.error_logger.error(message)
+        if self.slack:
+            self.slack.notify_error(message)
 
     def log_info(self, message: str):
         self.trade_logger.info(f"INFO | {message}")
+        if self.slack:
+            self.slack.notify_info(message)
