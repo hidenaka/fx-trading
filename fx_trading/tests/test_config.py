@@ -16,7 +16,7 @@ def test_settings_defaults(monkeypatch):
     settings = Settings()
     assert settings.environment == "practice"
     assert settings.risk_per_trade == 0.01
-    assert settings.currency_pair == "USD_JPY"
+    assert settings.currency_pairs == ["USD_JPY"]
 
 def test_settings_raises_on_missing_token():
     import os
