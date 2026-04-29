@@ -48,6 +48,18 @@ class OandaClient:
             "instrument": price["instrument"],
         }
 
+    def get_multiple_prices(self, instruments: list) -> dict:
+        """Returns dict of {instrument: {bid, ask}}"""
+        instrument_str = ",".join(instruments)
+        result = self._get(f"accounts/{self.account_id}/pricing", params={"instruments": instrument_str})
+        prices = {}
+        for price in result["prices"]:
+            prices[price["instrument"]] = {
+                "bid": float(price["closeoutBid"]),
+                "ask": float(price["closeoutAsk"]),
+            }
+        return prices
+
     def get_open_positions(self) -> List[Dict]:
         result = self._get(f"accounts/{self.account_id}/openPositions")
         return result.get("positions", [])

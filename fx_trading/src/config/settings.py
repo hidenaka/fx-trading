@@ -9,7 +9,8 @@ class Settings:
         self.account_id = os.getenv("OANDA_ACCOUNT_ID")
         self.environment = os.getenv("OANDA_ENVIRONMENT", "practice")
         self.risk_per_trade = float(os.getenv("RISK_PER_TRADE", "0.01"))
-        self.currency_pair = os.getenv("CURRENCY_PAIR", "USD_JPY")
+        pairs_str = os.getenv("CURRENCY_PAIRS", "USD_JPY")
+        self.currency_pairs = [p.strip() for p in pairs_str.split(",")]
         self.initial_capital = float(os.getenv("INITIAL_CAPITAL", "1000000"))
         self.max_daily_loss_pct = float(os.getenv("MAX_DAILY_LOSS_PCT", "5.0"))
         self.trading_start_hour = int(os.getenv("TRADING_START_HOUR", "7"))
