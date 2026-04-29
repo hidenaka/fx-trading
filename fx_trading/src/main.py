@@ -1,3 +1,4 @@
+import argparse
 from src.data.loader import DataLoader
 from src.data.preprocessor import Preprocessor
 from src.strategies.ma_macd import MaMacdStrategy
@@ -7,8 +8,10 @@ from src.reports.reporter import ReportGenerator
 from src.optimizer.grid_search import GridSearchOptimizer
 from src.wfa.walker import WalkForwardAnalyzer
 from src.selector.ranker import StrategyRanker
+from src.runner.polling_runner import PollingRunner
+from src.config.settings import Settings
 
-def main():
+def run_backtest():
     loader = DataLoader(data_dir="data")
     raw_df = loader.load_csv("sample", "usdjpy_1h")
     pre = Preprocessor()
@@ -45,6 +48,32 @@ def main():
     ranked = ranker.rank(rank_inputs)
     for r in ranked:
         print(f"{r['name']}: Score={r['score']:.2f}")
+
+def run_live():
+    print("=== Live Trading Mode ===")
+    print("WARNING: This will connect to OANDA and potentially place real orders!")
+    settings = Settings()
+    print(f"Environment: {settings.environment}")
+    print(f"Currency Pair: {settings.currency_pair}")
+    print(f"Risk per trade: {settings.risk_per_trade * 100}%")
+    
+    runner = PollingRunner(config=settings)
+    result = runner.run_cycle()
+    if result:
+        print("Trading cycle completed successfully")
+    else:
+        print("Trading cycle did not execute")
+
+def main():
+    parser = argparse.ArgumentParser(description="FX Auto Trading System")
+    parser.add_argument("--live", action="store_true", help="Run in live trading mode")
+    parser.add_argument("--backtest", action="store_true", help="Run backtest (default)")
+    args = parser.parse_args()
+
+    if args.live:
+        run_live()
+    else:
+        run_backtest()
 
 if __name__ == "__main__":
     main()
