@@ -15,6 +15,7 @@ class Settings:
         self.trading_start_hour = int(os.getenv("TRADING_START_HOUR", "7"))
         self.trading_end_hour = int(os.getenv("TRADING_END_HOUR", "6"))
         self.granularity = os.getenv("GRANULARITY", "H1")
+        self.slack_webhook_url = os.getenv("SLACK_WEBHOOK_URL")
         self.validate()
 
     def validate(self):
