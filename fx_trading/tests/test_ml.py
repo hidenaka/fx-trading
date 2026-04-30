@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from src.ml.predictor import MLPredictor
 from src.ml.trainer import MLTrainer
 from src.ml.feature_engineer import FeatureEngineer
@@ -228,5 +230,41 @@ def test_trainer_grid_search():
     trainer = MLTrainer(model_type="logistic_regression")
     model, best_params = trainer.train_with_grid_search(X, y)
     assert model is not None
-    assert "C" in best_params
+    assert "clf__C" in best_params
     assert trainer.model is model
+
+
+def test_trainer_train_returns_pipeline_with_scaler():
+    df = _synth_df(n=120)
+    fe = FeatureEngineer()
+    X, y = fe.prepare(df)
+    trainer = MLTrainer(model_type="logistic_regression")
+    model = trainer.train(X, y)
+    assert isinstance(model, Pipeline)
+    assert isinstance(model.named_steps["scaler"], StandardScaler)
+    assert "clf" in model.named_steps
+
+
+def test_trainer_grid_search_uses_scaled_pipeline():
+    df = _synth_df(n=200)
+    fe = FeatureEngineer()
+    X, y = fe.prepare(df)
+    trainer = MLTrainer(model_type="logistic_regression")
+    model, best_params = trainer.train_with_grid_search(X, y)
+    assert isinstance(model, Pipeline)
+    assert any(k.startswith("clf__") for k in best_params)
+
+
+def test_trainer_logistic_regression_converges_with_scaler():
+    # Catches ConvergenceWarning specifically. Unrelated RuntimeWarnings from
+    # scipy's L-BFGS-B probe steps still emit; this test only guards against
+    # the scaler regression that previously caused lbfgs to hit its iter cap.
+    import warnings
+    from sklearn.exceptions import ConvergenceWarning
+    df = _synth_df(n=300)
+    fe = FeatureEngineer()
+    X, y = fe.prepare(df)
+    trainer = MLTrainer(model_type="logistic_regression")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", ConvergenceWarning)
+        trainer.train(X, y)
