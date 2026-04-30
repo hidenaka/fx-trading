@@ -23,3 +23,23 @@ Thumbs.db
 
 # Project
 *.csv~
+
+# Screenshots & temp files
+*.png
+
+# Logs
+fx_trading/logs/*.log
+
+# Temporary data copies
+fx_trading/data/usd_jpy_1h.csv
+fx_trading/data/usdjpy_1h.csv
+
+# Auto-generated dashboard data (local only, docs/ is for GitHub Pages)
+fx_trading/dashboard/data/*.json
+!fx_trading/dashboard/data/.gitkeep
+
+# Duplicate dashboard directory at root
+/dashboard/
+
+# Temporary validation scripts
+fx_trading/scripts/validate_portfolio.py
