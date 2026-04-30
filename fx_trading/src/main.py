@@ -71,17 +71,104 @@ def run_backtest():
     for r in ranked:
         print(f"{r['name']}: Score={r['score']:.2f}")
 
-def run_live():
-    print("=== Live Trading Mode ===")
-    print("WARNING: This will connect to OANDA and potentially place real orders!")
+def run_live(dry_run=False):
+    if dry_run:
+        print("=== DRY RUN Mode ===")
+        print("This simulates live trading WITHOUT placing actual orders.")
+    else:
+        print("=== Live Trading Mode ===")
+        print("WARNING: This will connect to OANDA and potentially place real orders!")
+    
     settings = Settings()
     print(f"Environment: {settings.environment}")
     print(f"Currency Pairs: {settings.currency_pairs}")
     print(f"Risk per trade: {settings.risk_per_trade * 100}%")
     
+    if dry_run:
+        run_dry_trading(settings)
+    else:
+        runner = PollingRunner(config=settings)
+        results = runner.run_all_pairs()
+        print(f"Trading cycle results: {results}")
+
+def run_dry_trading(settings):
+    import pandas as pd
+    from src.monitoring.logger import TradeLogger
+    
+    logger = TradeLogger()
+    print("\n--- Dry Run Trading Cycle ---")
+    all_signals = {}
+    
+    for pair in settings.currency_pairs:
+        print(f"\n[Pair: {pair}]")
+        
+        # Load latest data from CSV (simulate recent prices)
+        try:
+            df = pd.read_csv(f"data/{pair.lower()}_h1.csv", parse_dates=["datetime"])
+        except FileNotFoundError:
+            print(f"  No data file found for {pair}, trying alternative...")
+            try:
+                df = pd.read_csv("data/usdjpy_1h_realistic.csv", parse_dates=["datetime"])
+            except FileNotFoundError:
+                print(f"  No data file found for {pair}, skipping.")
+                continue
+        
+        # Use last 50 bars as "recent" data
+        recent_df = df.tail(50).copy()
+        
+        # Generate signals from all strategies
+        strategies = StrategyFactory.available_strategies()
+        signals = {}
+        
+        for name in strategies:
+            try:
+                strategy = StrategyFactory.create(name)
+                result = strategy.generate_signals(recent_df.copy())
+                latest_signal = int(result.iloc[-1]["signal"])
+                signals[name] = latest_signal
+                if latest_signal != 0:
+                    print(f"  Strategy '{name}': Signal={'BUY' if latest_signal == 1 else 'SELL'}")
+            except Exception as e:
+                signals[name] = 0
+        
+        all_signals[pair] = signals
+        
+        # Aggregate signals (majority vote)
+        buy_votes = sum(1 for s in signals.values() if s == 1)
+        sell_votes = sum(1 for s in signals.values() if s == -1)
+        
+        latest_price = recent_df.iloc[-1]["close"]
+        
+        if buy_votes > sell_votes and buy_votes >= 2:
+            print(f"  >> ACTION: Would place BUY order @ {latest_price:.3f} (votes: {buy_votes} buy, {sell_votes} sell)")
+            logger.log_trade(pair, "BUY", 1000, latest_price)
+        elif sell_votes > buy_votes and sell_votes >= 2:
+            print(f"  >> ACTION: Would place SELL order @ {latest_price:.3f} (votes: {buy_votes} buy, {sell_votes} sell)")
+            logger.log_trade(pair, "SELL", 1000, latest_price)
+        else:
+            print(f"  >> No clear signal (votes: {buy_votes} buy, {sell_votes} sell). No action taken.")
+    
+    # Export portfolio state for dashboard
+    from src.api.data_exporter import DataExporter
+    exporter = DataExporter(output_dir="dashboard/data")
+    exporter.export_portfolio({
+        "capital": settings.initial_capital,
+        "daily_pnl": 0,
+        "positions": [],
+        "signals": all_signals,
+        "timestamp": pd.Timestamp.now().isoformat(),
+    })
+    print("\n[Dry run complete. No actual orders placed.]")
+    print("[Portfolio state exported to dashboard/data/portfolio.json]")
+
+def run_portfolio():
+    print("=== Portfolio Strategy Mode ===")
+    settings = Settings()
+    print(f"Pairs: {settings.currency_pairs}")
+    
     runner = PollingRunner(config=settings)
-    results = runner.run_all_pairs()
-    print(f"Trading cycle results: {results}")
+    results = runner.run_portfolio_cycle()
+    print(f"\nPortfolio results: {results}")
 
 def run_batch_backtest():
     from src.api.data_exporter import DataExporter
@@ -145,12 +232,16 @@ def run_batch_backtest():
 def main():
     parser = argparse.ArgumentParser(description="FX Auto Trading System")
     parser.add_argument("--live", action="store_true", help="Run in live trading mode")
+    parser.add_argument("--dry-run", action="store_true", help="Simulate live trading without placing orders")
     parser.add_argument("--backtest", action="store_true", help="Run backtest (default)")
     parser.add_argument("--fetch-data", action="store_true", help="Fetch historical data from OANDA")
     parser.add_argument("--batch-backtest", action="store_true", help="Run batch backtest for all pairs and strategies")
+    parser.add_argument("--portfolio", action="store_true", help="Run portfolio strategy mode")
     args = parser.parse_args()
 
-    if args.live:
+    if args.dry_run:
+        run_live(dry_run=True)
+    elif args.live:
         run_live()
     elif args.fetch_data:
         from src.data.oanda_fetcher import OandaDataFetcher
@@ -164,6 +255,8 @@ def main():
             print(f"Saved to {output_file}")
     elif args.batch_backtest:
         run_batch_backtest()
+    elif args.portfolio:
+        run_portfolio()
     else:
         run_backtest()
 

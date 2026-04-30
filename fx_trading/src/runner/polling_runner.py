@@ -8,6 +8,7 @@ from src.strategies.factory import StrategyFactory
 from src.strategies.base import Strategy
 from src.safety.circuit_breaker import CircuitBreaker
 from src.monitoring.logger import TradeLogger
+from src.portfolio.portfolio_manager import PortfolioManager
 
 class PollingRunner:
     def __init__(
@@ -34,6 +35,8 @@ class PollingRunner:
             capital=self.config.initial_capital,
             risk_per_trade=self.config.risk_per_trade,
         )
+        self.portfolio_manager = PortfolioManager()
+        self.dry_run = False
 
         if strategies is None:
             strategies = ["ma_macd"]
@@ -151,4 +154,40 @@ class PollingRunner:
         results = {}
         for pair in self.config.currency_pairs:
             results[pair] = self.run_cycle(pair=pair)
+        return results
+
+    def run_portfolio_cycle(self):
+        """Run one cycle using PortfolioManager for all pairs."""
+        import pandas as pd
+        results = {}
+        
+        for pair in self.config.currency_pairs:
+            try:
+                # Load recent data
+                df = pd.read_csv(f"data/{pair.lower()}_h1.csv", parse_dates=["datetime"])
+                recent_df = df.tail(50).copy()
+                
+                # Generate signal using PortfolioManager
+                result = self.portfolio_manager.generate_signal(recent_df)
+                signal = result["signal"]
+                
+                if signal != 0:
+                    latest_price = recent_df.iloc[-1]["close"]
+                    stop_loss = latest_price * 0.99 if signal == 1 else latest_price * 1.01
+                    lot = self.portfolio_manager.calculate_position(
+                        self.config.initial_capital,
+                        latest_price,
+                        stop_loss,
+                    )
+                    print(f"[Portfolio] {pair}: {'BUY' if signal == 1 else 'SELL'} @ {latest_price:.3f}, Lot={lot:.2f}, Regime={result['regime']}")
+                    
+                    if not self.dry_run:
+                        # Actually place order
+                        pass  # TODO: integrate with broker
+                
+                results[pair] = result
+            except Exception as e:
+                print(f"[Portfolio] Error processing {pair}: {e}")
+                results[pair] = {"signal": 0, "error": str(e)}
+        
         return results
