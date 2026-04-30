@@ -81,3 +81,32 @@ def test_volatility_target_adjusts_size():
     lot_normal = sizer.calculate_lot(capital=100000, entry_price=150.0, stop_loss=149.0, win_rate=0.6, avg_win=2.0, avg_loss=1.0, current_volatility=0.02)
     lot_high_vol = sizer.calculate_lot(capital=100000, entry_price=150.0, stop_loss=149.0, win_rate=0.6, avg_win=2.0, avg_loss=1.0, current_volatility=0.10)
     assert lot_high_vol < lot_normal
+
+import pandas as pd
+import numpy as np
+from src.portfolio.portfolio_manager import PortfolioManager
+
+def test_manager_generates_signal_from_multiple_strategies():
+    df = pd.DataFrame({
+        "datetime": pd.date_range("2024-01-01", periods=50, freq="h"),
+        "high": [150 + i * 0.1 for i in range(50)],
+        "low": [150 + i * 0.1 - 0.5 for i in range(50)],
+        "close": [150 + i * 0.1 for i in range(50)],
+    })
+    manager = PortfolioManager()
+    result = manager.generate_signal(df)
+    assert "signal" in result
+    assert result["signal"] in [-1, 0, 1]
+
+def test_manager_aggregates_signals_with_confidence():
+    # Mock: 2 buy, 1 sell, 1 neutral -> should be buy (majority)
+    manager = PortfolioManager(confidence_threshold=2)
+    signals = {"ma_macd": 1, "ma_cross": 1, "dow_theory": -1, "stochastic": 0}
+    result = manager._aggregate_signals(signals)
+    assert result == 1
+
+def test_manager_skips_when_no_clear_signal():
+    manager = PortfolioManager(confidence_threshold=3)
+    signals = {"ma_macd": 1, "ma_cross": -1, "dow_theory": 1, "stochastic": -1}
+    result = manager._aggregate_signals(signals)
+    assert result == 0
