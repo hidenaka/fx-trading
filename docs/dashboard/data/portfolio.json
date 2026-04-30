@@ -1,0 +1,12 @@
+{
+  "capital": 1015679.495889351,
+  "daily_pnl": 15679.495889351005,
+  "positions": [],
+  "signals": {
+    "USD_JPY": {
+      "ma_macd": -1,
+      "stochastic": 0
+    }
+  },
+  "timestamp": "2026-04-30T18:41:28.989475"
+}
