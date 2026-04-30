@@ -1,6 +1,7 @@
 import pandas as pd
 from typing import List, Optional
 from dataclasses import dataclass, field
+from src.engine.cost_model import CostModel
 
 
 @dataclass
@@ -15,12 +16,14 @@ class Trade:
 
 
 class BacktestEngine:
-    def __init__(self, initial_capital: float = 1_000_000, mode: str = "backtest", broker=None):
+    def __init__(self, initial_capital: float = 1_000_000, mode: str = "backtest",
+                 broker=None, cost_model: Optional[CostModel] = None):
         self.initial_capital = initial_capital
         self.capital = initial_capital
         self.trades: List[Trade] = []
         self.mode = mode
         self.broker = broker
+        self.cost_model = cost_model if cost_model is not None else CostModel()
 
     def run(self, df: pd.DataFrame, strategy, risk_manager):
         df = strategy.generate_signals(df)
@@ -45,19 +48,24 @@ class BacktestEngine:
             
             if position == 0 and row["signal"] != 0:
                 direction = int(row["signal"])
-                stop = row["close"] * 0.99 if direction == 1 else row["close"] * 1.01
-                lot = risk_manager.calculate_lot(row["close"], stop)
+                entry_price = self.cost_model.adjust_entry(row["close"], direction)
+                stop = entry_price * 0.99 if direction == 1 else entry_price * 1.01
+                lot = risk_manager.calculate_lot(entry_price, stop)
                 current_trade = Trade(
                     entry_time=row["datetime"],
-                    entry_price=row["close"],
+                    entry_price=entry_price,
                     direction=direction,
                     lot=lot,
                 )
                 position = direction
             elif position != 0 and row["signal"] != position:
+                exit_price = self.cost_model.adjust_exit(row["close"], current_trade.direction)
                 current_trade.exit_time = row["datetime"]
-                current_trade.exit_price = row["close"]
-                current_trade.pnl = (current_trade.exit_price - current_trade.entry_price) * current_trade.lot * current_trade.direction
+                current_trade.exit_price = exit_price
+                price_pnl = (exit_price - current_trade.entry_price) * current_trade.lot * current_trade.direction
+                days_held = (current_trade.exit_time - current_trade.entry_time).total_seconds() / 86400.0
+                swap_pnl = self.cost_model.swap_pnl(current_trade.lot, current_trade.direction, days_held)
+                current_trade.pnl = price_pnl + swap_pnl
                 self.trades.append(current_trade)
                 risk_manager.update_capital(current_trade.pnl)
                 self.capital = risk_manager.capital
