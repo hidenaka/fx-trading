@@ -33,3 +33,25 @@ def test_returns_neutral_for_insufficient_data():
     detector = MarketRegimeDetector(lookback=14)
     regime = detector.detect(df)
     assert regime == "neutral"
+
+from src.portfolio.strategy_selector import StrategySelector
+
+def test_selector_returns_trend_strategies():
+    selector = StrategySelector()
+    strategies = selector.select("trending")
+    assert "ma_macd" in strategies
+    assert "ma_cross" in strategies
+    assert "dow_theory" in strategies
+    assert "stochastic" not in strategies
+
+def test_selector_returns_ranging_strategies():
+    selector = StrategySelector()
+    strategies = selector.select("ranging")
+    assert "stochastic" in strategies
+    assert "ml_strategy" in strategies
+    assert "ma_macd" not in strategies
+
+def test_selector_returns_default_for_neutral():
+    selector = StrategySelector()
+    strategies = selector.select("neutral")
+    assert len(strategies) >= 2
