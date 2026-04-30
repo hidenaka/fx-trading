@@ -25,7 +25,8 @@ def update_portfolio_data():
     os.environ.setdefault("OANDA_ACCOUNT_ID", "dummy")
     
     settings = Settings()
-    data_dir = Path(__file__).parent.parent / "dashboard" / "data"
+    script_dir = Path(__file__).parent.parent
+    data_dir = script_dir / "dashboard" / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     
     all_signals = {}
@@ -36,7 +37,7 @@ def update_portfolio_data():
     for pair in settings.currency_pairs:
         print(f"Processing {pair}...")
         
-        loader = DataLoader(data_dir="data")
+        loader = DataLoader(data_dir=str(script_dir / "data"))
         try:
             raw_df = loader.load_csv(pair.lower(), "1h")
         except FileNotFoundError:
