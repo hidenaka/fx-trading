@@ -14,3 +14,6 @@
 2026-04-30 17:39:54,547 | INFO | Trading not allowed by circuit breaker
 2026-04-30 17:42:35,836 | INFO | Trading not allowed by circuit breaker
 2026-04-30 17:43:23,746 | INFO | Trading not allowed by circuit breaker
+2026-04-30 22:01:33,403 | INFO | Trading not allowed by circuit breaker
+2026-04-30 22:01:33,430 | TRADE | USD_JPY | CLOSE | units=0 | price=145.0
+2026-04-30 22:01:33,436 | ERROR | Transaction reconcile failed: network timeout

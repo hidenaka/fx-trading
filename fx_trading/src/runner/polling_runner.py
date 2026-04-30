@@ -291,8 +291,24 @@ class PollingRunner:
                     print(f"[Portfolio] {pair}: {'BUY' if signal == 1 else 'SELL'} @ {latest_price:.3f}, Lot={lot:.2f}, Regime={result['regime']}")
                     
                     if not self.dry_run:
-                        # Actually place order
-                        pass  # TODO: integrate with broker
+                        # Actually place order via broker
+                        try:
+                            order_builder = OrderBuilder(instrument=pair)
+                            order = order_builder.build_market_order(
+                                direction=signal,
+                                units=int(lot),
+                                stop_loss=stop_loss,
+                            )
+                            result_order = self.client.place_order(order)
+                            self.logger.log_trade(
+                                pair,
+                                "BUY" if signal == 1 else "SELL",
+                                int(lot),
+                                latest_price,
+                            )
+                            self.logger.log_info(f"Portfolio order placed: {result_order}")
+                        except Exception as e:
+                            self.logger.log_error(f"Portfolio order failed for {pair}: {e}")
                 
                 results[pair] = result
             except Exception as e:
