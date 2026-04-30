@@ -75,6 +75,15 @@ class OandaClient:
             data["shortUnits"] = short_units
         return self._put(f"accounts/{self.account_id}/positions/{instrument}/close", data)
 
+    def get_transactions_since(self, last_transaction_id: str) -> Dict:
+        # OANDA returns every transaction strictly after the given ID, plus the
+        # account's current latest ID. Caller is responsible for filtering by
+        # type (ORDER_FILL is the one that carries realized PnL).
+        return self._get(
+            f"accounts/{self.account_id}/transactions/sinceid",
+            params={"id": last_transaction_id},
+        )
+
     def _put(self, endpoint: str, data: Dict) -> Dict:
         url = f"{self.base_url}/{endpoint}"
         response = requests.put(url, headers=self.headers, json=data, timeout=30)

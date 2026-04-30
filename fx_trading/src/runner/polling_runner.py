@@ -9,6 +9,36 @@ from src.strategies.base import Strategy
 from src.safety.circuit_breaker import CircuitBreaker
 from src.monitoring.logger import TradeLogger
 from src.portfolio.portfolio_manager import PortfolioManager
+from src.risk.exposure_manager import ExposureManager
+
+
+def _cfg(config, name, default, cast):
+    # Safe config read: getattr returns auto-attrs on MagicMock test doubles,
+    # so we additionally try to coerce to the expected type and fall back on
+    # failure. Real Settings objects always pass through cleanly.
+    value = getattr(config, name, default)
+    try:
+        return cast(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _extract_realized_pnl(close_response: dict) -> float:
+    # OANDA's close_position returns long/short fill transactions; each carries
+    # a `pl` field with realized PnL in account currency. SL/TP-driven exits
+    # are NOT routed through here — they need a separate transaction-history
+    # reconciler to keep the circuit breaker in sync.
+    if not isinstance(close_response, dict):
+        return 0.0
+    pnl = 0.0
+    for key in ("longOrderFillTransaction", "shortOrderFillTransaction"):
+        fill = close_response.get(key) or {}
+        try:
+            pnl += float(fill.get("pl", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+    return pnl
+
 
 class PollingRunner:
     def __init__(
@@ -23,10 +53,12 @@ class PollingRunner:
             environment=self.config.environment,
         )
         self.circuit_breaker = CircuitBreaker(
-            max_daily_loss_pct=self.config.max_daily_loss_pct,
-            trading_start_hour=self.config.trading_start_hour,
-            trading_end_hour=self.config.trading_end_hour,
-            initial_capital=self.config.initial_capital,
+            max_daily_loss_pct=_cfg(self.config, "max_daily_loss_pct", 5.0, float),
+            trading_start_hour=_cfg(self.config, "trading_start_hour", 0, int),
+            trading_end_hour=_cfg(self.config, "trading_end_hour", 24, int),
+            initial_capital=_cfg(self.config, "initial_capital", 1_000_000, float),
+            max_drawdown_pct=_cfg(self.config, "max_drawdown_pct", 15.0, float),
+            max_consecutive_losses=_cfg(self.config, "max_consecutive_losses", 5, int),
         )
         self.logger = TradeLogger()
         default_instrument = getattr(self.config, "currency_pair", None) or self.config.currency_pairs[0]
@@ -36,7 +68,17 @@ class PollingRunner:
             risk_per_trade=self.config.risk_per_trade,
         )
         self.portfolio_manager = PortfolioManager()
+        self.exposure_manager = ExposureManager(
+            max_positions=_cfg(self.config, "max_open_positions", 3, int),
+            max_positions_per_currency=_cfg(self.config, "max_positions_per_currency", 2, int),
+        )
         self.dry_run = False
+        # Cursor for OANDA's transactions/sinceid stream. "0" tells the broker
+        # to return every transaction the account has ever had on first call,
+        # which is fine for practice/fresh accounts but expensive on live
+        # accounts with long history. Production should override this by
+        # priming from the broker's lastTransactionID at startup.
+        self.last_transaction_id = "0"
 
         if strategies is None:
             strategies = ["ma_macd"]
@@ -71,6 +113,10 @@ class PollingRunner:
         instrument = pair or getattr(self.config, "currency_pair", None) or self.config.currency_pairs[0]
         now = datetime.datetime.now()
         
+        # 0. Pull broker fills that happened outside our control (SL/TP) so
+        # the circuit breaker has the full PnL picture before deciding.
+        self._reconcile_realized_pnl(now)
+
         # 1. Check circuit breaker
         if not self.circuit_breaker.is_trading_allowed(now):
             self.logger.log_info("Trading not allowed by circuit breaker")
@@ -103,15 +149,25 @@ class PollingRunner:
             if pair and pair != getattr(self.config, "currency_pair", None):
                 order_builder = OrderBuilder(instrument=pair)
             
+            # Sync exposure manager with broker truth so externally-closed
+            # positions (SL/TP) don't leave stale slots blocking new entries.
+            self._sync_exposure_from_broker(positions)
+
             # 5. Check positions and act
             if not pair_positions:
                 # No position - check entry signal
                 if signal != 0:
+                    if not self.exposure_manager.can_open(instrument, signal):
+                        self.logger.log_info(
+                            f"Exposure limit blocks entry on {instrument} (signal={signal})"
+                        )
+                        return True
+
                     entry_price = price["ask"] if signal == 1 else price["bid"]
                     stop_loss = entry_price * 0.99 if signal == 1 else entry_price * 1.01
                     take_profit = entry_price * 1.02 if signal == 1 else entry_price * 0.98
                     units = int(self.risk_manager.calculate_lot(entry_price, stop_loss))
-                    
+
                     if units > 0:
                         order = order_builder.build_market_order(
                             direction=signal,
@@ -120,6 +176,7 @@ class PollingRunner:
                             take_profit=take_profit,
                         )
                         result = self.client.place_order(order)
+                        self.exposure_manager.register(instrument, signal)
                         self.logger.log_trade(
                             instrument,
                             "BUY" if signal == 1 else "SELL",
@@ -133,10 +190,21 @@ class PollingRunner:
                 long_units = float(current_pos.get("long", {}).get("units", 0))
                 short_units = float(current_pos.get("short", {}).get("units", 0))
                 current_direction = 1 if long_units > 0 else -1 if short_units < 0 else 0
-                
+
                 # Exit if signal changes direction
                 if signal != 0 and signal != current_direction:
-                    self.client.close_position(instrument)
+                    close_response = self.client.close_position(instrument)
+                    realized_pnl = _extract_realized_pnl(close_response)
+                    self.circuit_breaker.record_pnl(realized_pnl, now=now)
+                    # Advance cursor past this fill so the reconcile loop on
+                    # the next cycle does not re-apply the same PnL.
+                    fill_id = (
+                        close_response.get("longOrderFillTransaction", {}).get("id")
+                        or close_response.get("shortOrderFillTransaction", {}).get("id")
+                    )
+                    if fill_id:
+                        self.last_transaction_id = str(fill_id)
+                    self.exposure_manager.unregister(instrument)
                     self.logger.log_trade(
                         instrument,
                         "CLOSE",
@@ -150,6 +218,47 @@ class PollingRunner:
             self.logger.log_error(f"Error in trading cycle: {e}")
             return False
     
+    def _sync_exposure_from_broker(self, broker_positions: list) -> None:
+        # Replace local view with what the broker reports as actually open.
+        live = {}
+        for pos in broker_positions:
+            inst = pos.get("instrument")
+            if not inst:
+                continue
+            try:
+                long_units = float(pos.get("long", {}).get("units", 0) or 0)
+                short_units = float(pos.get("short", {}).get("units", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if long_units > 0:
+                live[inst] = 1
+            elif short_units < 0:
+                live[inst] = -1
+        self.exposure_manager.open_positions = live
+
+    def _reconcile_realized_pnl(self, now: datetime.datetime) -> None:
+        # Pulls every fill since the last cursor and feeds non-zero PnL into
+        # the circuit breaker. SL/TP fills go through here even though the
+        # runner never calls close_position for them.
+        try:
+            response = self.client.get_transactions_since(self.last_transaction_id)
+        except Exception as exc:
+            self.logger.log_error(f"Transaction reconcile failed: {exc}")
+            return
+        for txn in response.get("transactions", []) or []:
+            if txn.get("type") != "ORDER_FILL":
+                continue
+            try:
+                pl = float(txn.get("pl", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if pl == 0:
+                continue
+            self.circuit_breaker.record_pnl(pl, now=now)
+        new_cursor = response.get("lastTransactionID")
+        if new_cursor:
+            self.last_transaction_id = str(new_cursor)
+
     def run_all_pairs(self) -> dict:
         results = {}
         for pair in self.config.currency_pairs:
