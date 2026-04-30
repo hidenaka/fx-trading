@@ -61,8 +61,34 @@ def test_build_market_order_short():
     order = builder.build_market_order(direction=-1, units=1000, stop_loss=147.0, take_profit=145.0)
     assert order["units"] == "-1000"
 
-def test_build_market_order_without_stop():
+def test_build_market_order_requires_stop_loss():
     builder = OrderBuilder(instrument="USD_JPY")
-    order = builder.build_market_order(direction=1, units=500)
-    assert "stopLossOnFill" not in order
+    with pytest.raises(ValueError):
+        builder.build_market_order(direction=1, units=500, stop_loss=None)
+
+
+def test_build_market_order_omits_take_profit_when_none():
+    builder = OrderBuilder(instrument="USD_JPY")
+    order = builder.build_market_order(direction=1, units=500, stop_loss=145.0)
+    assert order["stopLossOnFill"]["price"] == "145.00"
     assert "takeProfitOnFill" not in order
+
+
+@patch("src.broker.oanda_client.requests.get")
+def test_get_transactions_since(mock_get):
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = {
+        "transactions": [
+            {"id": "101", "type": "ORDER_FILL", "pl": "1500.0"},
+            {"id": "102", "type": "ORDER_FILL", "pl": "-300.0"},
+            {"id": "103", "type": "MARKET_ORDER", "pl": "0.0"},
+        ],
+        "lastTransactionID": "103",
+    }
+    client = OandaClient(api_token="t", account_id="acc", environment="practice")
+    result = client.get_transactions_since("100")
+    assert result["lastTransactionID"] == "103"
+    assert len(result["transactions"]) == 3
+    args, kwargs = mock_get.call_args
+    assert "transactions/sinceid" in args[0]
+    assert kwargs["params"] == {"id": "100"}
