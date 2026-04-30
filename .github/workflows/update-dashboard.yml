@@ -23,7 +23,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install pandas numpy scikit-learn
+        pip install pandas numpy scikit-learn python-dotenv
     
     - name: Update portfolio data
       run: |
