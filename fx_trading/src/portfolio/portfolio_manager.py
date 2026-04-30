@@ -1,61 +1,60 @@
 import pandas as pd
 from typing import Dict, Any
-
+from src.portfolio.market_regime import MarketRegimeDetector
+from src.portfolio.strategy_selector import StrategySelector
+from src.portfolio.position_sizer import PositionSizer
+from src.strategies.factory import StrategyFactory
 
 class PortfolioManager:
-    """Orchestrate market regime detection, strategy selection, signal aggregation, and position sizing."""
-
-    def __init__(
-        self,
-        capital: float = 1_000_000.0,
-        risk_per_trade: float = 0.01,
-        confidence_threshold: int = 2,
-    ):
-        self.capital = capital
-        self.risk_per_trade = risk_per_trade
+    def __init__(self, confidence_threshold: int = 2):
+        self.regime_detector = MarketRegimeDetector()
+        self.strategy_selector = StrategySelector()
+        self.position_sizer = PositionSizer()
         self.confidence_threshold = confidence_threshold
 
     def generate_signal(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Generate a trading signal and detect market regime from price data."""
-        if len(df) < 10:
-            return {"signal": 0, "regime": "unknown"}
-
-        # Simple regime detection based on trend
-        short_ma = df["close"].tail(10).mean()
-        long_ma = df["close"].tail(30).mean() if len(df) >= 30 else df["close"].tail(10).mean()
-
-        if short_ma > long_ma * 1.001:
-            regime = "trending_up"
-        elif short_ma < long_ma * 0.999:
-            regime = "trending_down"
-        else:
-            regime = "ranging"
-
-        # Simple signal generation based on momentum
-        latest = df.iloc[-1]["close"]
-        prev = df.iloc[-5]["close"] if len(df) >= 5 else df.iloc[0]["close"]
-
-        if latest > prev * 1.002:
-            signal = 1
-        elif latest < prev * 0.998:
-            signal = -1
-        else:
-            signal = 0
-
+        # Detect market regime
+        regime = self.regime_detector.detect(df)
+        
+        # Select strategies based on regime
+        strategy_names = self.strategy_selector.select(regime)
+        
+        # Generate signals from each strategy
+        signals = {}
+        for name in strategy_names:
+            try:
+                strategy = StrategyFactory.create(name)
+                result = strategy.generate_signals(df.copy())
+                latest_signal = int(result.iloc[-1]["signal"])
+                signals[name] = latest_signal
+            except Exception:
+                signals[name] = 0
+        
+        # Aggregate signals
+        aggregated = self._aggregate_signals(signals)
+        
         return {
-            "signal": signal,
+            "signal": aggregated,
             "regime": regime,
+            "strategies_used": strategy_names,
+            "individual_signals": signals,
         }
 
-    def calculate_position(self, capital: float, entry_price: float, stop_loss: float) -> float:
-        """Calculate lot size based on risk per trade."""
-        risk_amount = capital * self.risk_per_trade
-        price_risk = abs(entry_price - stop_loss)
-        if price_risk == 0:
-            return 0.0
-        # For FX, 1 lot = 100,000 units; simplify to a reasonable lot size
-        lot = risk_amount / (price_risk * 1000)
-        return round(lot, 2)
+    def _aggregate_signals(self, signals: Dict[str, int]) -> int:
+        buy_votes = sum(1 for s in signals.values() if s == 1)
+        sell_votes = sum(1 for s in signals.values() if s == -1)
+        
+        if buy_votes >= self.confidence_threshold and buy_votes > sell_votes:
+            return 1
+        elif sell_votes >= self.confidence_threshold and sell_votes > buy_votes:
+            return -1
+        else:
+            return 0
 
-    def update_capital(self, pnl: float):
-        self.capital += pnl
+    def calculate_position(self, capital: float, entry_price: float, stop_loss: float,
+                           win_rate: float = 0.5, avg_win: float = 1.0, avg_loss: float = 1.0,
+                           current_volatility: float = 0.02) -> float:
+        return self.position_sizer.calculate_lot(
+            capital, entry_price, stop_loss,
+            win_rate, avg_win, avg_loss, current_volatility
+        )

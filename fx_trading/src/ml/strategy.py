@@ -17,7 +17,7 @@ class MLStrategy(Strategy):
             return df
         
         try:
-            X, _ = self.fe.prepare(df)
+            X = self.fe.make_features(df)
             if len(X) == 0:
                 df["signal"] = 0
                 return df

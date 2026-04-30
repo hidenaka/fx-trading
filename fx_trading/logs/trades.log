@@ -8,3 +8,9 @@
 2026-04-29 23:22:29,755 | INFO | Trading not allowed by circuit breaker
 2026-04-29 23:22:44,660 | INFO | Trading not allowed by circuit breaker
 2026-04-29 23:23:31,672 | INFO | Trading not allowed by circuit breaker
+2026-04-29 23:24:18,858 | INFO | Trading not allowed by circuit breaker
+2026-04-30 05:57:39,535 | TRADE | USD_JPY | SELL | units=1000 | price=147.585
+2026-04-30 17:34:20,957 | INFO | Trading not allowed by circuit breaker
+2026-04-30 17:39:54,547 | INFO | Trading not allowed by circuit breaker
+2026-04-30 17:42:35,836 | INFO | Trading not allowed by circuit breaker
+2026-04-30 17:43:23,746 | INFO | Trading not allowed by circuit breaker

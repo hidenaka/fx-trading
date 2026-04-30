@@ -1,14 +1,17 @@
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Tuple
 
 class MLTrainer:
-    def __init__(self, model_type: str = "logistic_regression"):
+    def __init__(self, model_type: str = "logistic_regression", cv=None):
         self.model_type = model_type
+        # Time-series CV is required: a random K-Fold leaks future bars into
+        # training folds and inflates the reported score.
+        self.cv = cv if cv is not None else TimeSeriesSplit(n_splits=5)
         self.model = None
 
     def _create_model(self):
@@ -44,7 +47,19 @@ class MLTrainer:
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
 
-        grid = GridSearchCV(model, param_grid, cv=3, scoring="accuracy")
+        grid = GridSearchCV(model, param_grid, cv=self.cv, scoring="accuracy")
         grid.fit(X, y)
         self.model = grid.best_estimator_
         return self.model, grid.best_params_
+
+    @staticmethod
+    def chronological_split(
+        X: pd.DataFrame, y: pd.Series, test_size: float = 0.2
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+        if not 0 < test_size < 1:
+            raise ValueError("test_size must be in (0, 1)")
+        n = len(X)
+        split = int(n * (1 - test_size))
+        X_train, X_test = X.iloc[:split], X.iloc[split:]
+        y_train, y_test = y.iloc[:split], y.iloc[split:]
+        return X_train, X_test, y_train, y_test
