@@ -13,6 +13,10 @@ class Settings:
         self.currency_pairs = [p.strip() for p in pairs_str.split(",")]
         self.initial_capital = float(os.getenv("INITIAL_CAPITAL", "1000000"))
         self.max_daily_loss_pct = float(os.getenv("MAX_DAILY_LOSS_PCT", "5.0"))
+        self.max_drawdown_pct = float(os.getenv("MAX_DRAWDOWN_PCT", "15.0"))
+        self.max_consecutive_losses = int(os.getenv("MAX_CONSECUTIVE_LOSSES", "5"))
+        self.max_open_positions = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
+        self.max_positions_per_currency = int(os.getenv("MAX_POSITIONS_PER_CURRENCY", "2"))
         self.trading_start_hour = int(os.getenv("TRADING_START_HOUR", "7"))
         self.trading_end_hour = int(os.getenv("TRADING_END_HOUR", "6"))
         self.granularity = os.getenv("GRANULARITY", "H1")

@@ -50,6 +50,18 @@ def run_backtest():
             for i, r in enumerate(wfa_results):
                 print(f"Window {i+1}: Train PF={r['train_pf']:.2f}, Test PF={r['test_pf']:.2f}, Params={r['params']}")
 
+            wfa_summary = wfa.summarize(wfa_results)
+            print(
+                f"\n--- WFA Summary ({name} | {pair}) ---\n"
+                f"  Windows:           {wfa_summary['windows']}\n"
+                f"  OOS trades:        {wfa_summary['oos_total_trades']}\n"
+                f"  OOS profit factor: {wfa_summary['oos_profit_factor']:.2f}\n"
+                f"  OOS win rate:      {wfa_summary['oos_win_rate']:.2%}\n"
+                f"  OOS total PnL:     {wfa_summary['oos_total_pnl']:.2f}\n"
+                f"  Avg WFA efficiency:{wfa_summary['avg_wfa_efficiency']:.2f}  (test_pf / train_pf)\n"
+                f"  Param change ratio:{wfa_summary['param_change_ratio']:.2%}  (instability indicator)"
+            )
+
             all_results.append({
                 "name": f"{pair} {name} Best",
                 "profit_factor": best["profit_factor"],
@@ -196,25 +208,32 @@ def run_batch_backtest():
             risk = RiskManager(capital=settings.initial_capital, risk_per_trade=settings.risk_per_trade)
             engine = BacktestEngine(initial_capital=settings.initial_capital)
             trades = engine.run(df, strategy, risk)
-            
-            winning_trades = [t for t in trades if t.pnl and t.pnl > 0]
-            losing_trades = [t for t in trades if t.pnl and t.pnl <= 0]
-            
-            gross_profit = sum(t.pnl for t in winning_trades)
-            gross_loss = abs(sum(t.pnl for t in losing_trades))
-            profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0
-            win_rate = len(winning_trades) / len(trades) if trades else 0
-            
+
+            report = ReportGenerator(initial_capital=settings.initial_capital).generate(trades)
+            pf = report["profit_factor"]
+            pf_value = float("inf") if pf == float("inf") else round(pf, 4)
             result = {
                 "pair": pair,
                 "strategy": name,
-                "total_trades": len(trades),
-                "win_rate": round(win_rate, 4),
-                "profit_factor": round(profit_factor, 4),
+                "total_trades": report["total_trades"],
+                "win_rate": round(report["win_rate"], 4),
+                "profit_factor": pf_value,
+                "total_pnl": round(report["total_pnl"], 2),
+                "max_drawdown_pct": round(report["max_drawdown_pct"], 2),
+                "max_drawdown_abs": round(report["max_drawdown_abs"], 2),
+                "sharpe_ratio": round(report["sharpe_ratio"], 3),
+                "sortino_ratio": round(report["sortino_ratio"], 3),
+                "avg_holding_hours": round(report["avg_holding_hours"], 2),
                 "final_capital": round(engine.capital, 2),
             }
             all_results.append(result)
-            print(f"{name:20s} | Trades: {result['total_trades']:3d} | Win Rate: {result['win_rate']:.2%} | PF: {result['profit_factor']:.2f} | Capital: ¥{result['final_capital']:,.0f}")
+            print(
+                f"{name:20s} | Trades: {result['total_trades']:3d} | "
+                f"Win Rate: {result['win_rate']:.2%} | PF: {result['profit_factor']:.2f} | "
+                f"Sharpe: {result['sharpe_ratio']:.2f} | "
+                f"MaxDD: {result['max_drawdown_pct']:.2f}% | "
+                f"Capital: ¥{result['final_capital']:,.0f}"
+            )
     
     exporter.export_backtest_result("batch", {
         "results": all_results,
@@ -224,10 +243,16 @@ def run_batch_backtest():
     
     # Summary table
     print("\n=== Batch Backtest Summary ===")
-    print(f"{'Pair':<12} {'Strategy':<15} {'Trades':>6} {'Win%':>8} {'PF':>8} {'Capital':>15}")
-    print("-" * 65)
+    header = f"{'Pair':<12} {'Strategy':<15} {'Trades':>6} {'Win%':>8} {'PF':>8} {'Sharpe':>8} {'MaxDD%':>8} {'Capital':>15}"
+    print(header)
+    print("-" * len(header))
     for r in all_results:
-        print(f"{r['pair']:<12} {r['strategy']:<15} {r['total_trades']:>6} {r['win_rate']:>7.1%} {r['profit_factor']:>8.2f} ¥{r['final_capital']:>13,.0f}")
+        print(
+            f"{r['pair']:<12} {r['strategy']:<15} {r['total_trades']:>6} "
+            f"{r['win_rate']:>7.1%} {r['profit_factor']:>8.2f} "
+            f"{r['sharpe_ratio']:>8.2f} {r['max_drawdown_pct']:>7.2f}% "
+            f"¥{r['final_capital']:>13,.0f}"
+        )
 
 def main():
     parser = argparse.ArgumentParser(description="FX Auto Trading System")
