@@ -107,3 +107,42 @@ def test_vwap_zero_volume_returns_nan():
     })
     vwap = compute_vwap(df)
     assert vwap.isna().all()
+
+
+from equity_trading.src.data.feature_builder import (
+    compute_volume_ratio,
+    compute_momentum_reversal,
+    compute_sma,
+)
+
+
+def test_volume_ratio_against_recent_average():
+    volume = pd.Series([100] * 20 + [150])
+    ratio = compute_volume_ratio(volume, period=20)
+    assert ratio.iloc[-1] == pytest.approx(1.5)
+
+
+def test_volume_ratio_first_period_is_nan():
+    volume = pd.Series([100] * 25)
+    ratio = compute_volume_ratio(volume, period=20)
+    assert ratio.iloc[:19].isna().all()
+
+
+def test_momentum_reversal_detects_negative_to_positive():
+    prices = pd.Series([100.0, 99.5, 99.0, 98.5, 99.0, 99.5, 100.0])
+    flag = compute_momentum_reversal(prices, lookback=3)
+    assert flag.iloc[-1] is True or flag.iloc[-1] == 1
+
+
+def test_momentum_reversal_constant_prices_no_reversal():
+    prices = pd.Series([100.0] * 10)
+    flag = compute_momentum_reversal(prices, lookback=3)
+    assert flag.iloc[-1] is False or flag.iloc[-1] == 0
+
+
+def test_sma_basic():
+    prices = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+    sma = compute_sma(prices, period=3)
+    assert sma.iloc[2] == pytest.approx(2.0)
+    assert sma.iloc[4] == pytest.approx(4.0)
+    assert sma.iloc[:2].isna().all()
