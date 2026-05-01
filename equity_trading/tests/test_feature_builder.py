@@ -69,3 +69,41 @@ def test_bollinger_first_period_values_are_nan():
     prices = pd.Series(np.arange(30, dtype=float))
     upper, middle, lower = compute_bollinger_bands(prices, period=20, num_std=2.0)
     assert upper.iloc[:19].isna().all()
+
+
+from equity_trading.src.data.feature_builder import compute_vwap
+
+
+def test_vwap_constant_price_equals_price():
+    df = pd.DataFrame({
+        "high": [100.0] * 5,
+        "low": [100.0] * 5,
+        "close": [100.0] * 5,
+        "volume": [1000, 2000, 1500, 3000, 2500],
+    })
+    vwap = compute_vwap(df)
+    assert (vwap == 100.0).all()
+
+
+def test_vwap_weighted_correctly():
+    df = pd.DataFrame({
+        "high": [100.0, 110.0, 90.0],
+        "low":  [100.0, 110.0, 90.0],
+        "close":[100.0, 110.0, 90.0],
+        "volume": [100, 200, 100],
+    })
+    vwap = compute_vwap(df)
+    assert vwap.iloc[0] == pytest.approx(100.0)
+    assert vwap.iloc[1] == pytest.approx(32000.0 / 300.0)
+    assert vwap.iloc[2] == pytest.approx(41000.0 / 400.0)
+
+
+def test_vwap_zero_volume_returns_nan():
+    df = pd.DataFrame({
+        "high": [100.0, 110.0],
+        "low":  [100.0, 110.0],
+        "close":[100.0, 110.0],
+        "volume": [0, 0],
+    })
+    vwap = compute_vwap(df)
+    assert vwap.isna().all()

@@ -49,3 +49,24 @@ def compute_bollinger_bands(
     upper = middle + num_std * std
     lower = middle - num_std * std
     return upper, middle, lower
+
+
+def compute_vwap(df: pd.DataFrame) -> pd.Series:
+    """累積VWAPを計算.
+
+    入力DataFrameは high/low/close/volume カラムを持つこと。
+    典型価格（high+low+close）/3 を出来高で重み付けして累積平均。
+    呼び出し側で「当日分のみ」を渡すことで「当日VWAP」になる。
+
+    Args:
+        df: ['high', 'low', 'close', 'volume'] カラムを持つ DataFrame
+
+    Returns:
+        累積VWAP の時系列。volume が 0 のときは NaN。
+    """
+    typical = (df["high"] + df["low"] + df["close"]) / 3.0
+    pv = typical * df["volume"]
+    cum_pv = pv.cumsum()
+    cum_v = df["volume"].cumsum()
+    vwap = cum_pv / cum_v
+    return vwap.where(cum_v > 0, pd.NA)
