@@ -1,0 +1,41 @@
+# Environment
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+
+# Data (local only, gitignored)
+data/prices/*
+data/historical/*
+data/calibration/*
+data/backups/*
+data/logs/*
+!data/prices/.gitkeep
+!data/historical/.gitkeep
+!data/calibration/.gitkeep
+!data/backups/.gitkeep
+!data/logs/.gitkeep
+
+# SQLite databases
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
