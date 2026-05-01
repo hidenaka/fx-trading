@@ -27,3 +27,25 @@ def compute_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
     rsi = rsi.where(avg_loss != 0, 100.0)
     rsi = rsi.where(~((avg_gain == 0) & (avg_loss == 0)), pd.NA)
     return rsi
+
+
+def compute_bollinger_bands(
+    prices: pd.Series,
+    period: int = 20,
+    num_std: float = 2.0,
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """ボリンジャーバンドを計算.
+
+    Args:
+        prices: 終値の時系列
+        period: 移動平均期間
+        num_std: バンド幅の標準偏差倍数
+
+    Returns:
+        (upper_band, middle_band, lower_band) のタプル
+    """
+    middle = prices.rolling(window=period).mean()
+    std = prices.rolling(window=period).std(ddof=0)
+    upper = middle + num_std * std
+    lower = middle - num_std * std
+    return upper, middle, lower
