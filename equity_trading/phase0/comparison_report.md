@@ -185,19 +185,52 @@
 
 **Best for gap_fill:** QQQ / `{"gap_threshold": 0.003, "stop_extension": 0.005}` → EV 7.84 (WR 0.644, Trades 45)
 
+## 戦略: intraday_momentum
+
+| Symbol | Params | Trades | Wins | Win Rate | Avg P&L | Expected (P&L×Count) |
+|--------|--------|--------|------|----------|---------|----------------------|
+| SPY | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.0}` | 291 | 78 | 0.268 | -0.103% | -30.02 |
+| SPY | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.001}` | 110 | 34 | 0.309 | -0.103% | -11.32 |
+| SPY | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.003}` | 16 | 7 | 0.438 | -0.056% | -0.90 |
+| SPY | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.001}` | 110 | 44 | 0.400 | -0.121% | -13.28 |
+| SPY | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.003}` | 16 | 5 | 0.312 | -0.131% | -2.10 |
+| QQQ | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.0}` | 270 | 100 | 0.370 | -0.082% | -22.12 |
+| QQQ | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.001}` | 130 | 45 | 0.346 | -0.099% | -12.91 |
+| QQQ | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.003}` | 28 | 15 | 0.536 | 0.001% | 0.02 |
+| QQQ | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.001}` | 130 | 50 | 0.385 | -0.093% | -12.15 |
+| QQQ | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.003}` | 28 | 11 | 0.393 | -0.076% | -2.14 |
+| IWM | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.0}` | 269 | 89 | 0.331 | -0.138% | -37.24 |
+| IWM | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.001}` | 134 | 42 | 0.313 | -0.151% | -20.28 |
+| IWM | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.003}` | 22 | 10 | 0.455 | -0.071% | -1.56 |
+| IWM | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.001}` | 134 | 62 | 0.463 | -0.088% | -11.80 |
+| IWM | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.003}` | 22 | 11 | 0.500 | -0.065% | -1.43 |
+| DIA | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.0}` | 267 | 62 | 0.232 | -0.101% | -26.95 |
+| DIA | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.001}` | 114 | 37 | 0.325 | -0.095% | -10.87 |
+| DIA | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.003}` | 11 | 2 | 0.182 | -0.159% | -1.74 |
+| DIA | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.001}` | 114 | 42 | 0.368 | -0.080% | -9.08 |
+| DIA | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.003}` | 11 | 7 | 0.636 | 0.131% | 1.44 |
+| XLK | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.0}` | 247 | 70 | 0.283 | -0.084% | -20.67 |
+| XLK | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.001}` | 172 | 46 | 0.267 | -0.090% | -15.50 |
+| XLK | `{"_max_hold_bars": 5, "entry_bar_pos": 71, "threshold": 0.003}` | 62 | 15 | 0.242 | -0.091% | -5.65 |
+| XLK | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.001}` | 172 | 60 | 0.349 | -0.103% | -17.79 |
+| XLK | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.003}` | 62 | 22 | 0.355 | -0.125% | -7.73 |
+
+**Best for intraday_momentum:** DIA / `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.003}` → EV 1.44 (WR 0.636, Trades 11)
+
 ## 横断比較：戦略別ベスト
 
 | Rank | Strategy | Symbol | Params | EV | Win Rate | Trades |
 |------|----------|--------|--------|-----|----------|--------|
 | 1 | gap_fill | QQQ | `{"gap_threshold": 0.003, "stop_extension": 0.005}` | 7.84 | 0.644 | 45 |
-| 2 | mean_reversion | XLK | `{"threshold": 0.4}` | 0.69 | 0.611 | 36 |
-| 3 | env_dependent_reversion | SPY | `{"threshold": 0.5}` | 0.14 | 1.000 | 3 |
-| 4 | vwap_scalp | SPY | `{"k_entry": 1.5}` | 0.09 | 1.000 | 2 |
-| 5 | analysis_driven_reversion | XLK | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` | -2.73 | 0.426 | 47 |
-| 6 | multi_timeframe | IWM | `{"rsi_15min_threshold": 30.0, "rsi_5min_threshold": 25.0, "rsi_60min_threshold": 35.0}` | -3.22 | 0.481 | 54 |
-| 7 | opening_range_breakout | XLK | `{"or_window_bars": 6}` | -9.19 | 0.390 | 136 |
-| 8 | momentum_breakout | XLK | `{"breakout_period": 78, "volume_multiplier": 2.0}` | -12.52 | 0.436 | 165 |
-| 9 | trend_follow | XLK | `{"breakout_period": 50, "rsi_threshold": 55.0}` | -33.15 | 0.409 | 399 |
+| 2 | intraday_momentum | DIA | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.003}` | 1.44 | 0.636 | 11 |
+| 3 | mean_reversion | XLK | `{"threshold": 0.4}` | 0.69 | 0.611 | 36 |
+| 4 | env_dependent_reversion | SPY | `{"threshold": 0.5}` | 0.14 | 1.000 | 3 |
+| 5 | vwap_scalp | SPY | `{"k_entry": 1.5}` | 0.09 | 1.000 | 2 |
+| 6 | analysis_driven_reversion | XLK | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` | -2.73 | 0.426 | 47 |
+| 7 | multi_timeframe | IWM | `{"rsi_15min_threshold": 30.0, "rsi_5min_threshold": 25.0, "rsi_60min_threshold": 35.0}` | -3.22 | 0.481 | 54 |
+| 8 | opening_range_breakout | XLK | `{"or_window_bars": 6}` | -9.19 | 0.390 | 136 |
+| 9 | momentum_breakout | XLK | `{"breakout_period": 78, "volume_multiplier": 2.0}` | -12.52 | 0.436 | 165 |
+| 10 | trend_follow | XLK | `{"breakout_period": 50, "rsi_threshold": 55.0}` | -33.15 | 0.409 | 399 |
 
 ## 推奨：**gap_fill** （QQQ、EV 7.84）
 

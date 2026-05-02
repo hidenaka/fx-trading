@@ -77,6 +77,10 @@ def simulate_strategy(
     if params is None:
         params = {}
 
+    # Allow per-strategy override of max_hold_bars via params (e.g. EOD-bound strategies).
+    if "_max_hold_bars" in params:
+        max_hold_bars = int(params["_max_hold_bars"])
+
     entry_signal = strategy.compute_entry_signal(bars_5min, daily, atr_pct, params)
 
     opens = bars_5min["open"].to_numpy()

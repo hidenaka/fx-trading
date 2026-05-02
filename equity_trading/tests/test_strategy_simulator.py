@@ -420,6 +420,22 @@ def test_simultaneous_low_below_stop_and_high_above_target_stop_wins():
     assert trades.iloc[0]["exit_price"] == pytest.approx(99.70, abs=0.01)
 
 
+def test_params_max_hold_bars_overrides_function_default():
+    """Passing _max_hold_bars in params overrides the function-level default."""
+    n = 60
+    closes = np.full(n, 100.0)
+    bars = _bars_from_arrays(closes, closes + 0.05, closes - 0.05, closes)
+    summary, trades = simulate_strategy(
+        strategy=_SignalAtZero(), bars_5min=bars, daily=_flat_daily(),
+        atr_pct=0.10, params={"_max_hold_bars": 3}, max_hold_bars=78,
+        return_trades=True,
+    )
+    # 3-bar hold (not 78); flat price → time exit at bars_held=3
+    assert summary["trade_count"] == 1
+    assert trades.iloc[0]["exit_type"] == "time"
+    assert trades.iloc[0]["bars_held"] == 3
+
+
 def test_entry_bar_low_high_does_not_trigger_exit():
     """Entry bar's low/high happened BEFORE entry fill; must not trigger exit."""
     n = 30

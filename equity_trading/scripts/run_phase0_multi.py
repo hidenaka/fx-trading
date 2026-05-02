@@ -27,6 +27,7 @@ from equity_trading.src.phase0.multi_strategy_runner import run_all_strategies
 from equity_trading.src.strategy.strategies.analysis_driven_reversion import AnalysisDrivenReversionStrategy
 from equity_trading.src.strategy.strategies.env_dependent import EnvDependentReversionStrategy
 from equity_trading.src.strategy.strategies.gap_fill import GapFillStrategy
+from equity_trading.src.strategy.strategies.intraday_momentum import IntradayMomentumStrategy
 from equity_trading.src.strategy.strategies.mean_reversion import MeanReversionStrategy
 from equity_trading.src.strategy.strategies.momentum_breakout import MomentumBreakoutStrategy
 from equity_trading.src.strategy.strategies.multi_timeframe import MultiTimeframeStrategy
@@ -78,6 +79,15 @@ PARAM_GRID = {
         {"gap_threshold": 0.003, "stop_extension": 0.005},  # 0.3% gap, 0.5% stop
         {"gap_threshold": 0.005, "stop_extension": 0.005},  # 0.5% gap, 0.5% stop
         {"gap_threshold": 0.010, "stop_extension": 0.010},  # 1.0% gap, 1.0% stop
+    ],
+    "intraday_momentum": [
+        # entry_bar_pos=71 → fill at bar 72 close (~15:35 ET); _max_hold_bars=5 → exit ~16:00
+        {"threshold": 0.0, "entry_bar_pos": 71, "_max_hold_bars": 5},      # any positive morning
+        {"threshold": 0.001, "entry_bar_pos": 71, "_max_hold_bars": 5},    # +0.1% morning
+        {"threshold": 0.003, "entry_bar_pos": 71, "_max_hold_bars": 5},    # +0.3% morning
+        # last-hour variant: entry at ~15:00, hold 1h
+        {"threshold": 0.001, "entry_bar_pos": 65, "_max_hold_bars": 11},
+        {"threshold": 0.003, "entry_bar_pos": 65, "_max_hold_bars": 11},
     ],
 }
 
@@ -140,6 +150,7 @@ def main(
         VWAPScalpStrategy(),
         OpeningRangeBreakoutStrategy(),
         GapFillStrategy(),
+        IntradayMomentumStrategy(),
     ]
     results = run_all_strategies(
         strategies=strategies,
