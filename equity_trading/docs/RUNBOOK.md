@@ -1,13 +1,20 @@
-# Equity Bot — Operations Runbook (敏腕モード v2.1 / Plan 2.5.2)
+# Equity Bot — Operations Runbook (敏腕モード v2 / Plan 2.5.2)
 
-> **モード**: 敏腕モード v2.1 (ORB + LHM、3x レバレッジ ETF、新exitルール)
-> **想定リターン**: **年 +18.66%**（7年バックテスト、新ORB exit 適用後）
-> **想定 Max DD**: **-14.05%**（7-yr バックテスト最悪期間、新exitで改善）
+> **モード**: 敏腕モード v2 (ORB + LHM、3x レバレッジ ETF、V0 ORB exit)
+> **想定リターン**: **年 +13.75%**（7年バックテスト、V0 ORB exit）
+> **想定 Max DD**: **-16.33%**（7-yr バックテスト最悪期間）
 >
-> **2026-05-02 v2.1 改訂**: ORB のexitルールを `stop=OR_low → OR_low+0.25R`,
-> `target=OR_high+1R → OR_high+2R` に変更。7年データでEV +0.178%→+0.309%
-> (74%改善)、年率 +13.75%→+18.66%、最大DD -16.33%→-14.05% で全方位改善。
-> 直近1年では +$48,500、直近90日では +$14,600 のリターン上積み。
+> **2026-05-03 v2.1 撤回**: V2.1 (ORB exit `stop_mult=0.25 / target_mult=2.0`) を
+> validation framework で初の holdout 検証にかけたところ **REJECT**:
+> - OOS: variant -13.78% vs baseline -12.80% (FAIL)
+> - Tail risk: worst trade -5.74%, MaxDD 31.78% (FAIL)
+> - Sample size: 652 trades (PASS)
+>
+> 7年 in-sample で観測された +18.66%/yr は**過適合**であり、デプロイすべきでないと
+> framework が判断。デフォルトを V0 (stop_mult=0, target_mult=1) に戻した。
+> `stop_mult` / `target_mult` のパラメータ化自体は variant 探索のため保持。
+> 詳細: `equity_trading/phase0/validation/2026-05-03_orb_v2_1.md`
+>
 > **資金前提**: 初期 ¥100,000 + 毎月 ¥50,000 の積立
 >
 > **2026-05-02 改訂**: Pre-FOMC drift を構成から外しました。7年集計では +EV だが
@@ -98,23 +105,16 @@ exactly what this framework is designed to catch.)
 
 **Halt rule**: realized loss > 2% of equity in a day → new entries suppressed (also blocks Pre-FOMC, ORB).
 
-## Projected portfolio return (敏腕 v2.1 = LHM+ORB w/ new exits)
+## Projected portfolio return (敏腕 v2 = LHM+ORB, V0 exit)
 
 7年フル replay（$100k 初期 + ¥50,000/月 12回 = 投入総額 $127,300）:
 
 | Scenario | 終了残高 | 純損益 | 7-yr Ann | Max DD |
 |----------|---------:|------:|--------:|-------:|
-| **A: 25%×3 (敏腕推奨)** | **$331,207** | **+$203,907** | **+18.66%** | **-14.05%** |
-| 旧 V0 (参考) | $246,440 | +$119,140 | +13.75% | -16.33% |
+| **A: 25%×3 (敏腕推奨, V0 exit)** | **$246,440** | **+$119,140** | **+13.75%** | **-16.33%** |
 
-直近窓での純損益（V0 → V2.1 改善幅）:
-
-| 窓 | V0 | V2.1 | 改善 |
-|----|---:|---:|---:|
-| W90 直近90日 | +$4,529 | **+$19,143** | **+$14,613** |
-| W1Y 直近1年 | +$15,371 | **+$63,868** | **+$48,497** |
-| **2025 (V0でほぼゼロ)** | **-$3,456** | **+$29,093** | **+$32,549** |
-| 2022 利上げ局面 | -$17,556 | -$15,119 | +$2,437 |
+> 注: V2.1 (stop_mult=0.25 / target_mult=2.0) は 7年 in-sample で +18.66%/yr に
+> 見えたが、holdout で REJECT されたため採用しない。詳細は冒頭参照。
 
 ### 月次積立シミュレーション (Scenario A, 7-yr)
 

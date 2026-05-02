@@ -87,7 +87,11 @@ def test_orb_resets_per_day():
 
 
 def test_orb_compute_exit_levels_default_multipliers():
-    """Defaults validated in 7-yr backtest: stop=OR_low+0.25R, target=OR_high+2R."""
+    """V0 defaults: stop=OR_low (stop_mult=0), target=OR_high+1R (target_mult=1).
+
+    V2.1 (stop=0.25, target=2.0) was REJECTED on holdout 2026-05-03 — see
+    equity_trading/phase0/validation/2026-05-03_orb_v2_1.md.
+    """
     s = OpeningRangeBreakoutStrategy()
     bars = _make_one_day_bars(or_high=100.5, or_low=100.0, breakout_at_bar=10)
     entry_price = float(bars["close"].iloc[10])
@@ -96,20 +100,22 @@ def test_orb_compute_exit_levels_default_multipliers():
         params={"or_window_bars": 6},
     )
     # OR_low = 100.0, OR_high = 100.5, range = 0.5
-    # Stop   = 100.0 + 0.25 * 0.5 = 100.125
-    # Target = 100.5 + 2.0  * 0.5 = 101.5
-    assert stop == pytest.approx(100.125, abs=1e-6)
-    assert target == pytest.approx(101.5, abs=1e-6)
+    # Stop   = 100.0 + 0.0 * 0.5 = 100.0
+    # Target = 100.5 + 1.0 * 0.5 = 101.0
+    assert stop == pytest.approx(100.0, abs=1e-6)
+    assert target == pytest.approx(101.0, abs=1e-6)
 
 
 def test_orb_compute_exit_levels_overridable_via_params():
-    """stop_mult/target_mult params override defaults (V0 legacy: 0.0/1.0)."""
+    """stop_mult/target_mult params override defaults (used by validation framework)."""
     s = OpeningRangeBreakoutStrategy()
     bars = _make_one_day_bars(or_high=100.5, or_low=100.0, breakout_at_bar=10)
     entry_price = float(bars["close"].iloc[10])
     stop, target = s.compute_exit_levels(
         bars_5min=bars, entry_idx=10, entry_price=entry_price, atr_pct=0.10,
-        params={"or_window_bars": 6, "stop_mult": 0.0, "target_mult": 1.0},
+        params={"or_window_bars": 6, "stop_mult": 0.25, "target_mult": 2.0},
     )
-    assert stop == pytest.approx(100.0, abs=1e-6)
-    assert target == pytest.approx(101.0, abs=1e-6)
+    # Stop   = 100.0 + 0.25 * 0.5 = 100.125
+    # Target = 100.5 + 2.0  * 0.5 = 101.5
+    assert stop == pytest.approx(100.125, abs=1e-6)
+    assert target == pytest.approx(101.5, abs=1e-6)
