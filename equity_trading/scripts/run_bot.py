@@ -21,6 +21,7 @@ from equity_trading.src.data.price_fetcher import PriceFetcher
 from equity_trading.src.live.eod_runner import run_eod
 from equity_trading.src.live.intraday_runner import run_intraday
 from equity_trading.src.live.morning_runner import run_morning
+from equity_trading.src.live.orb_runner import run_orb
 from equity_trading.src.live.pre_fomc_runner import run_pre_fomc, run_fomc_close
 from equity_trading.src.state.migrations import init_database
 
@@ -30,7 +31,11 @@ DEFAULT_CACHE_DIR = "equity_trading/data/prices"
 # Long-data (7-yr) validated: drop XLK gap_fill (sample artifact in 2024-2026),
 # keep IWM (modest +EV on 7-yr), add DIA. QQQ is the standout (EV +18.35).
 DEFAULT_SYMBOLS = ["SPY", "QQQ", "DIA", "IWM"]
-PRE_FOMC_SYMBOL = "XLK"  # XLK pre-FOMC drift confirmed on 7-yr data: WR 0.649, EV +30.83.
+# 敏腕モード: TECL (3x XLK) pre-FOMC with VIX > 22 filter — backtest WR 0.700,
+# avg +1.555% (n=10) vs unfiltered TECL pre-FOMC drift.
+PRE_FOMC_SYMBOL = "TECL"
+PRE_FOMC_VIX_MIN = 22.0
+VIX_PARQUET_RELATIVE = "VIX_1day_2019-05-01_2026-05-01.parquet"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -40,9 +45,11 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--intraday", action="store_true", help="Run mean_reversion (every 5min)")
     mode.add_argument("--eod", action="store_true", help="Close positions, write summary")
     mode.add_argument("--pre-fomc", action="store_true",
-                      help="Place pre-FOMC long XLK at ~12:30 ET on day before FOMC")
+                      help=f"Place pre-FOMC long {PRE_FOMC_SYMBOL} at ~12:30 ET on day before FOMC")
     mode.add_argument("--fomc-close", action="store_true",
                       help="Close hold-overnight positions at ~13:55 ET on FOMC day")
+    mode.add_argument("--orb", action="store_true",
+                      help="Run Opening Range Breakout sweep (TECL/TQQQ/TNA, every 5min after 10:30 ET)")
     mode.add_argument("--check", action="store_true", help="Connectivity check only (no orders, no DB writes)")
     parser.add_argument("--db-path", default=DEFAULT_DB_PATH)
     parser.add_argument("--cache-dir", default=DEFAULT_CACHE_DIR)
@@ -132,8 +139,31 @@ def main(argv: list[str] | None = None) -> int:
             print(summary.get("summary_md", ""))
         elif args.pre_fomc:
             print(f"[run_bot] Pre-FOMC entry check at {now_utc.isoformat()}")
+            vix_path = cache_dir / VIX_PARQUET_RELATIVE
+            vix_daily = None
+            if vix_path.exists():
+                import pandas as pd
+                vix_daily = pd.read_parquet(vix_path)
+            else:
+                print(f"  [warn] VIX cache not found at {vix_path}; running without VIX filter")
             summary = run_pre_fomc(
                 symbol=PRE_FOMC_SYMBOL,
+                db_path=db_path,
+                broker=broker,
+                fetcher=fetcher,
+                now_utc=now_utc,
+                vix_min=PRE_FOMC_VIX_MIN if vix_daily is not None else None,
+                vix_daily=vix_daily,
+            )
+            print(f"  Entries placed: {summary.get('entries_placed', 0)}")
+            if summary.get("halted"):
+                print("  Circuit halted.")
+            if summary.get("errors"):
+                for e in summary["errors"]:
+                    print(f"  [warn] {e}")
+        elif args.orb:
+            print(f"[run_bot] ORB sweep at {now_utc.isoformat()}")
+            summary = run_orb(
                 db_path=db_path,
                 broker=broker,
                 fetcher=fetcher,

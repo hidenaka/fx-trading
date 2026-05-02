@@ -1,114 +1,140 @@
-# Equity Bot — Operations Runbook (Plan 2.0 Paper MVP)
+# Equity Bot — Operations Runbook (敏腕モード / Plan 2.5)
+
+> **モード**: 敏腕モード (3x レバレッジ ETF + VIX フィルター)
+> **想定リターン**: 年 +13%（25%×3 setup; 95% CI に基づく）
+> **想定 Max DD**: -16.77%（7-yr バックテスト最悪期間）
+> **資金前提**: 初期 ¥100,000 + 毎月 ¥50,000 の積立
 
 ## What this bot does
 
-Runs five scheduled jobs against Alpaca **Paper** account:
-- **Morning** (~9:31 ET): scans SPY/QQQ/DIA/IWM for gap-fill setups, places bracket orders if signal fires.
-- **Intraday** (every 5 min, 9:35-15:50 ET): scans XLK for mean-reversion setups, places bracket order if signal fires.
-- **Pre-FOMC** (~12:30 ET, only on the trading day before each FOMC announcement): places long XLK bracket; position is marked `hold_overnight=1` and survives EOD.
-- **EOD** (~15:55 ET): closes any still-open positions **with `hold_overnight=0`** at market, writes daily P&L summary. Pre-FOMC overnight positions are skipped here.
-- **FOMC Close** (~13:55 ET on FOMC announcement days): closes any open `hold_overnight=1` positions before the 14:00 ET statement.
+Runs scheduled jobs against Alpaca **Paper** account using **3x leveraged ETFs**:
 
-**Strategy validation:** all numbers below come from a 7-year backtest (2019-05 to 2026-05) with realistic low/high/gap stop modeling.
+- **Morning** (~9:31 ET): scans SPY/QQQ/DIA/IWM for gap-fill setups (legacy strategy, low-EV anchor).
+- **ORB** (every 5 min, 10:35-15:50 ET): scans **TECL/TQQQ/TNA** for 60-min Opening Range breakouts. **敏腕モードの主戦場**.
+- **Intraday** (every 5 min, 9:35-15:50 ET): legacy XLK mean-reversion (optional; can skip).
+- **Pre-FOMC** (~12:30 ET, only on the trading day before each FOMC): places long **TECL** if prior-day VIX close > 22. Position is `hold_overnight=1` and survives EOD.
+- **EOD** (~15:55 ET): closes still-open positions with `hold_overnight=0` at market.
+- **FOMC Close** (~13:55 ET on FOMC days): closes `hold_overnight=1` positions before the 14:00 ET statement.
 
-| Strategy | Symbol | Param | n | WR | EV (sum %P&L) | Avg P&L/trade |
-|----------|--------|-------|---|------|----------------|---------------|
-| gap_fill | QQQ | gap≥0.3% | 213 | 0.573 | +18.35 | +0.086% |
-| pre_fomc_drift | XLK | midday entry | 57 | 0.649 | +30.83 | +0.541% |
-| gap_fill | IWM | gap≥1.0% | 33 | 0.576 | +4.97 | +0.151% |
-| gap_fill | SPY | gap≥0.5% | 81 | 0.494 | +3.08 | +0.038% |
-| gap_fill | DIA | gap≥0.5% | 75 | 0.453 | +3.02 | +0.040% |
+## Validated edge (7-yr RTH backtest, 2019-05 → 2026-05)
 
-**Dropped strategies (sample artifacts):**
-- ❌ XLK gap_fill — positive EV in 2024-2026 only; negative across all params on 7-yr window.
-- ❌ Turn-of-Month — uniformly negative EV across 5 ETFs on 7-yr data.
-- ❌ Intraday Momentum (HKS) — negative EV on 2-yr; pattern decayed post-2014.
+### 敏腕コア戦略
 
-**Sizing (β-mode):** 25% of account equity per trade, capped at $2,500. Max 3 concurrent positions.
+| Strategy | Symbol | n | WR | EV (sum %) | Avg/trade |
+|----------|--------|---|------|------------|-----------|
+| **ORB** | TECL | 486 | 0.543 | +108.38 | +0.223% |
+| **ORB** | TQQQ | 531 | 0.565 | +76.96 | +0.145% |
+| **ORB** | TNA | 369 | 0.534 | +62.06 | +0.168% |
+| **Pre-FOMC drift (VIX > 22)** | TECL | 10 | 0.700 | +15.55 | +1.555% |
+| **Pre-FOMC drift** | UPRO | 57 | 0.649 | +30.83 | +0.541% |
+| **Pre-FOMC drift** | UDOW | 57 | 0.649 | +30.83 | +0.541% |
+| **Last-Hour Momentum** | UPRO | – | – | +EV | – |
+| **Last-Hour Momentum** | UDOW | – | – | +EV | – |
 
-**Halt rule:** if today's realized loss exceeds 2% of equity, new entries are suppressed (also blocks Pre-FOMC).
+### Legacy non-leveraged (gap_fill, optional)
 
-**Projected portfolio return** (full 7-yr backtest with $100k account, position sizing scenarios):
+| Strategy | Symbol | n | WR | EV |
+|----------|--------|---|------|-----|
+| gap_fill | QQQ (0.3%) | 213 | 0.573 | +18.35 |
+| gap_fill | IWM (1.0%) | 33 | 0.576 | +4.97 |
+| gap_fill | SPY (0.5%) | 81 | 0.494 | +3.08 |
+| gap_fill | DIA (0.5%) | 75 | 0.453 | +3.02 |
 
-| Scenario | Annualized | 95% CI | Max DD | Trades/yr |
-|----------|-----------:|--------|-------:|----------:|
-| A: 25%×3 (Plan 2.0 baseline) | +2.54% | [+1.39, +3.32] | -1.55% | ~78 |
-| B: 50%×2 | +4.82% | [+2.39, +5.72] | -2.76% | ~78 |
-| C: 100%×1 sequential | **+7.26%** | [+3.40, +7.22] | -5.01% | ~78 |
+**Sizing (敏腕モード)**: 25% of account equity per trade, **max 3 concurrent positions**. Same-symbol re-entry blocked while a position is open.
+
+**Halt rule**: realized loss > 2% of equity in a day → new entries suppressed (also blocks Pre-FOMC, ORB).
+
+## Projected portfolio return (Scenario A 推奨, 7-yr backtest)
+
+| Scenario | Annualized | Max DD | Trades/yr |
+|----------|-----------:|-------:|----------:|
+| **A: 25%×3 (敏腕推奨)** | **+13.0%** | **-16.77%** | ~213 |
+| B: 50%×2 (強気) | +20.5% | -32.4% | ~213 |
+| C: 100%×1 sequential | +27.1% | -49.2% | ~213 |
+
+### 月次積立シミュレーション (Scenario A, 7-yr)
+
+| 投入総額 | 最終残高 (USD) | 最終残高 (JPY) | 含み益 | Max DD |
+|---------:|---------------:|---------------:|------:|-------:|
+| ¥4,300,000 (≈$27,920) | $41,373 | ¥6,371,482 | +48.2% | -16.77% |
+
+詳細年次表 → `equity_trading/phase0/monthly_dca_projection.md`
 
 ## First-time setup
 
 1. `cd /Users/hideakimacbookair/自動トレード`
-2. Confirm `equity_trading/.env` contains valid Paper API keys (look for `ALPACA_BASE_URL=https://paper-api.alpaca.markets`).
-3. Run a connectivity check:
+2. `equity_trading/.env` に有効な Paper API キーがあるか確認 (`ALPACA_BASE_URL=https://paper-api.alpaca.markets`).
+3. **VIX キャッシュを確認/再生成** (Pre-FOMC が VIX フィルターで使う):
+   ```
+   ls -la equity_trading/data/prices/VIX_1day_2019-05-01_2026-05-01.parquet
+   # 見つからなければ:
+   python3 equity_trading/scripts/save_vix_history.py
+   ```
+4. **Leveraged ETF データのバックフィル** (初回のみ):
+   ```
+   python3 equity_trading/scripts/backfill_leveraged_etfs.py
+   ```
+   想定: TQQQ/UPRO/TNA/TECL/UDOW で各約 200-330k の 5min バー。
+5. 接続確認:
    ```
    python3 equity_trading/scripts/run_bot.py --check
    ```
-   Expected output: account number, equity, cash. No orders.
-4. If equity is much larger than $10k, the β $2,500 cap still applies, but consider depositing-out via Alpaca dashboard to mirror β assumptions.
 
 ## Daily routine (manual, Monday-Friday only)
 
-Run these commands at the indicated NY-time wall-clock points. Use `nohup` or a terminal multiplexer if you want them detached.
+NY 時刻の壁時計に合わせて以下を実行 (`nohup` か tmux 等で detach 推奨)。
 
-### Every trading day
+### Every trading day (敏腕モード フル)
 
 | Time (NY) | Command |
 |-----------|---------|
 | 09:31 | `python3 equity_trading/scripts/run_bot.py --morning` |
-| 09:35-15:50, every 5 min | `python3 equity_trading/scripts/run_bot.py --intraday` |
+| 10:35-15:50, every 5 min | `python3 equity_trading/scripts/run_bot.py --orb` |
 | 15:55 | `python3 equity_trading/scripts/run_bot.py --eod` |
 
-### Pre-FOMC days (8 per year — see schedule)
+### ORB ループヘルパー (10:35-15:50 ET, ~63 反復)
 
-On the trading day **immediately before** an FOMC announcement, ALSO run:
+```
+for i in $(seq 1 63); do
+  python3 equity_trading/scripts/run_bot.py --orb
+  sleep 300
+done
+```
+
+### Pre-FOMC days (年 8 回)
+
+FOMC 発表日の **直前の取引日** にも実行:
 
 | Time (NY) | Command |
 |-----------|---------|
 | 12:30 | `python3 equity_trading/scripts/run_bot.py --pre-fomc` |
 
-The position will survive that day's EOD (the runner marks it `hold_overnight=1`).
+VIX 前日終値 ≤ 22 ならスキップされる（fil­ter on）。ポジションは `hold_overnight=1` で EOD を生き残る。
 
 ### FOMC announcement days
 
-On FOMC announcement days, ALSO run BEFORE the 14:00 ET statement:
+FOMC 発表日には 14:00 ET 声明発表の前に必ず実行:
 
 | Time (NY) | Command |
 |-----------|---------|
 | 13:55 | `python3 equity_trading/scripts/run_bot.py --fomc-close` |
 
-This closes the pre-FOMC XLK position before the announcement (the bot avoids holding through the volatility spike).
-
 ### FOMC schedule (current edition)
 
-The bot has the schedule baked in (`equity_trading/src/strategy/strategies/pre_fomc.py::DEFAULT_FOMC_DATES`). Through 2026-04-29 it covers:
+`equity_trading/src/strategy/strategies/pre_fomc.py::DEFAULT_FOMC_DATES`. 2026-04-29 まで:
 
 ```
 2025: Jan 29, Mar 19, May 7, Jun 18, Jul 30, Sep 17, Oct 29, Dec 10
 2026: Jan 28, Mar 18, Apr 29
 ```
 
-For any date listed here, the **previous trading day** is when you run `--pre-fomc`.
-
-### Intraday loop helper
-
-```
-for i in $(seq 1 75); do
-  python3 equity_trading/scripts/run_bot.py --intraday
-  sleep 300
-done
-```
-
-(75 × 5 min = 6.25 hours, covers the full session.)
-
 ## Reading the daily summary
 
-After `--eod` runs, the script prints a Markdown summary. SQLite also has the data:
+EOD 後に Markdown サマリが標準出力に出る。SQLite が source of truth:
 
-- `equity_trading/data/trades.sqlite` is the source of truth.
-- Tables: `positions` (every trade), `bot_runs` (audit log), `daily_pnl` (one row per day).
+- `equity_trading/data/trades.sqlite`
+- テーブル: `positions`, `bot_runs`, `daily_pnl`
 
-Quick check:
 ```
 sqlite3 equity_trading/data/trades.sqlite \
   "SELECT trade_date, realized_pnl_usd, n_entries, n_exits FROM daily_pnl ORDER BY trade_date DESC LIMIT 7"
@@ -116,29 +142,36 @@ sqlite3 equity_trading/data/trades.sqlite \
 
 ## What can go wrong
 
-1. **Insufficient bars error in logs.** Means the Alpaca API returned fewer bars than expected. Most often happens during pre-market or right at the open. Wait a minute and re-run.
-2. **Circuit halt triggered.** Bot logs `circuit halted: ...` in `bot_runs.error_message`. No new entries until next day.
-3. **Order rejected (PDT rule).** A bracket order was rejected. Check Alpaca dashboard — Paper can hit pattern-day-trader rules under $25k equity. Currently we don't auto-detect; if you see "PDT" errors, reduce trade frequency.
-4. **`--morning` placed orders on a holiday.** The bot doesn't (yet) check the market calendar. Don't run on US holidays.
+1. **Insufficient bars エラー**: Alpaca が想定より少ないバーを返した。寄り直後に多発。1分待って再実行。
+2. **Circuit halt**: 当日損失 > 2% で停止。`bot_runs.error_message` に記録。翌日まで新規エントリ無し。
+3. **VIX cache 欠落**: Pre-FOMC 実行時に warn が出る。`save_vix_history.py` を再実行。
+4. **PDT 抵触**: $25k 未満で過剰に day-trade すると Alpaca が拒否。Scenario A の 25%×3 + ORB 1日 1-2 銘柄なら通常は安全。
+5. **休場日に `--morning`/`--orb` を実行**: bot は祝日カレンダーをチェックしない。土日と米連邦祝日は手動で skip。
 
-## Where to look when something is wrong
+## トラブル時の調査クエリ
 
 ```
 sqlite3 equity_trading/data/trades.sqlite \
-  "SELECT id, run_type, started_at_utc, status, error_message FROM bot_runs ORDER BY id DESC LIMIT 10"
+  "SELECT id, run_type, started_at_utc, status, error_message FROM bot_runs ORDER BY id DESC LIMIT 20"
 ```
 
-## When to stop
+## リスク開示 (敏腕モード)
 
-Plan 2.0 is a Paper validation phase. Run for 4-12 weeks, accumulate ~50+ trades across all strategies, then compare actual stats vs Phase 0 expectations:
+- **3x レバレッジ ETF は 1日で -10% 以上動く**。Decay (volatility drag) は通常 RTH のみ保有なら軽微。
+- **Max DD -16.77% を 1度は経験する想定** (7-yr で最悪は 2022 年の利上げ局面類似のパターン)。
+- **VIX > 30 局面ではポジションサイズを半分に** することを検討（任意ガード）。
+- 年率 +13% の中央値は安定収益ではない。**個別年で -10% も普通に起きる**。長期視点が必要。
 
-| Strategy | Expected WR | Expected avg P&L |
-|----------|-------------|-------------------|
-| gap_fill SPY 0.3% | ~0.72 | ~0.14% |
-| gap_fill QQQ 0.5% | ~0.75 | ~0.29% |
-| gap_fill IWM 1.0% | ~0.69 | ~0.43% |
-| gap_fill XLK 0.5% | ~0.77 | ~1.40% |
-| mean_reversion XLK 0.40 | ~0.64 | ~0.03% |
+## When to evaluate
 
-If actual WR/EV is within ±10 pts of expected → strategies generalize, proceed to Plan 2.1 (live deployment).
-If actual is below expected → diagnose with `equity_trading/scripts/run_phase0_diagnostic.py` against the new live trades.
+4-12 週運用したら以下と比較:
+
+| 戦略 | Expected WR | Expected avg P&L |
+|------|------------:|------------------:|
+| ORB TECL | ~0.54 | +0.22% |
+| ORB TQQQ | ~0.57 | +0.15% |
+| ORB TNA | ~0.53 | +0.17% |
+| Pre-FOMC TECL (VIX>22) | ~0.70 | +1.56% |
+| Pre-FOMC UPRO/UDOW | ~0.65 | +0.54% |
+
+実測 WR/EV が ±10 pt 以内 → 戦略は generalize. 大幅に下回る → `run_phase0_diagnostic.py` で原因究明.

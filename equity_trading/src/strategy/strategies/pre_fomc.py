@@ -69,6 +69,8 @@ class PreFOMCDriftStrategy(TradingStrategy):
     ) -> pd.Series:
         fomc_dates = params.get("fomc_dates", self.DEFAULT_FOMC_DATES)
         entry_bar_pos = int(params.get("entry_bar_pos", 0))
+        vix_min = params.get("vix_min")  # if set, only fire when prev-day VIX close > vix_min
+        vix_daily = params.get("_vix_daily")  # DataFrame with daily VIX (index = UTC ts)
 
         ny_date = pd.Series(
             bars_5min.index.tz_convert("America/New_York").date,
@@ -86,6 +88,24 @@ class PreFOMCDriftStrategy(TradingStrategy):
         is_pre_fomc = ny_date.isin(pre_fomc_set)
         is_signal_bar = (bar_pos == entry_bar_pos)
         signal = is_pre_fomc & is_signal_bar
+
+        if vix_min is not None and vix_daily is not None and len(vix_daily) > 0:
+            # Compute prev-day VIX close for each row's NY date (no lookahead).
+            vix_dates = list(vix_daily.index.tz_convert("America/New_York").date) \
+                if vix_daily.index.tz is not None else list(vix_daily.index.date)
+            vix_closes = vix_daily["close"].to_numpy()
+            import bisect
+            vix_prev_by_date: dict[dt.date, float] = {}
+            for d in unique_dates:
+                idx = bisect.bisect_left(vix_dates, d)
+                if idx > 0:
+                    vix_prev_by_date[d] = float(vix_closes[idx - 1])
+                else:
+                    vix_prev_by_date[d] = float("nan")
+            vix_per_bar = ny_date.map(vix_prev_by_date)
+            vix_ok = (vix_per_bar > float(vix_min)).fillna(False)
+            signal = signal & vix_ok
+
         return signal.astype(bool)
 
     def compute_exit_levels(

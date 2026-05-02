@@ -39,19 +39,23 @@ from equity_trading.src.strategy.strategies.pre_fomc import PreFOMCDriftStrategy
 #
 # Format: (StrategyClass, symbol, params, label, cost_pct)
 SELECTED = [
-    (PreFOMCDriftStrategy,    "XLK", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_XLK", 0.10),
-    (PreFOMCDriftStrategy,    "QQQ", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_QQQ", 0.10),
-    (PreFOMCDriftStrategy,    "IWM", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_IWM", 0.10),
-    (PreFOMCDriftStrategy,    "SPY", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_SPY", 0.10),
-    (PreFOMCDriftStrategy,    "DIA", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_DIA", 0.10),
-    (OpeningRangeBreakoutStrategy, "QQQ", {"or_window_bars": 12}, "orb_60min_QQQ", 0.10),
-    # Last-hour momentum: prior day's last-30min positive → enter today at 9:35 ET, hold ~5 hr
-    (LastHourMomentumStrategy, "SPY", {"threshold": 0.003, "_max_hold_bars": 60}, "lhm_SPY", 0.10),
-    (LastHourMomentumStrategy, "QQQ", {"threshold": 0.003, "_max_hold_bars": 60}, "lhm_QQQ", 0.10),
+    # ============= 敏腕モード: 3x leveraged ETFs =============
+    # Pre-FOMC drift via 3x ETFs. TECL is the standout (VIX > 22 → WR 70%, avg +1.555%).
+    (PreFOMCDriftStrategy,    "TECL", {"entry_bar_pos": 0, "_max_hold_bars": 130, "vix_min": 22}, "pre_fomc_TECL", 0.10),
+    (PreFOMCDriftStrategy,    "UPRO", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_UPRO", 0.10),
+    (PreFOMCDriftStrategy,    "UDOW", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_UDOW", 0.10),
+    # ORB 60-min on 3x ETFs (massive EV due to amplified intraday moves)
+    (OpeningRangeBreakoutStrategy, "TECL", {"or_window_bars": 12}, "orb_TECL", 0.10),
+    (OpeningRangeBreakoutStrategy, "TQQQ", {"or_window_bars": 12}, "orb_TQQQ", 0.10),
+    (OpeningRangeBreakoutStrategy, "TNA",  {"or_window_bars": 12}, "orb_TNA",  0.10),
+    # Last-hour momentum on UPRO (only leveraged variant where LHM works)
+    (LastHourMomentumStrategy, "UPRO", {"threshold": 0.003, "_max_hold_bars": 60}, "lhm_UPRO", 0.10),
+    (LastHourMomentumStrategy, "UDOW", {"threshold": 0.003, "_max_hold_bars": 60}, "lhm_UDOW", 0.10),
 ]
 
 
-def collect_all_trades(symbols: list[str], data_map, atr_map) -> pd.DataFrame:
+def collect_all_trades(symbols: list[str], data_map, atr_map,
+                       vix_daily: pd.DataFrame | None = None) -> pd.DataFrame:
     """Run each selected strategy with its per-strategy cost_pct and collect trades."""
     all_trades: list[pd.DataFrame] = []
     spy_5min = data_map.get(("SPY", 5))
@@ -67,6 +71,8 @@ def collect_all_trades(symbols: list[str], data_map, atr_map) -> pd.DataFrame:
         augmented = {**params, "_daily": daily}
         if spy_5min is not None:
             augmented["_spy_5min"] = spy_5min
+        if vix_daily is not None:
+            augmented["_vix_daily"] = vix_daily
         _, trades = simulate_strategy(
             strategy=strat_cls(),
             bars_5min=bars, daily=daily, atr_pct=atr,
@@ -218,7 +224,9 @@ def main() -> int:
                          base_url=cfg.alpaca_base_url)
     fetcher = PriceFetcher(broker=broker, cache_dir=cache_dir)
 
-    symbols = ["SPY", "QQQ", "IWM", "DIA", "XLK"]
+    # Both base and 3x leveraged ETFs are loaded (敏腕モード)
+    symbols = ["SPY", "QQQ", "IWM", "DIA", "XLK",
+               "TQQQ", "UPRO", "TNA", "TECL", "UDOW"]
     print(f"loading data for {symbols}...")
     data_map = collect_phase0_data(
         fetcher=fetcher, symbols=symbols, start=period_start, end=period_end,
@@ -227,8 +235,11 @@ def main() -> int:
     atr_map = {s: analyze_atr_distribution(data_map[(s, 5)], period=14)["median_pct"]
                for s in symbols}
 
+    vix_daily = pd.read_parquet(project_root / "data" / "prices" / "VIX_1day_2019-05-01_2026-05-01.parquet")
+    print(f"loaded VIX: {len(vix_daily)} daily bars")
+
     print("collecting trades from selected strategies...")
-    trades = collect_all_trades(symbols, data_map, atr_map)
+    trades = collect_all_trades(symbols, data_map, atr_map, vix_daily=vix_daily)
     print(f"  total trades: {len(trades)}")
     print(trades.groupby("strategy_label").size())
 

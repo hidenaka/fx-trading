@@ -80,8 +80,14 @@ def run_pre_fomc(
     fetcher,
     now_utc: datetime | None = None,
     fomc_dates: Sequence[dt.date] | None = None,
+    vix_min: float | None = None,
+    vix_daily: "pd.DataFrame | None" = None,  # type: ignore[name-defined]
 ) -> dict:
     """Place a long position on `symbol` if today is a pre-FOMC trading day.
+
+    If vix_min and vix_daily are provided, only fires when the prior trading
+    day's VIX close > vix_min. Backtest shows VIX > 22 → WR 0.700, avg +1.555%
+    on TECL pre-FOMC.
 
     Returns: {"entries_placed": int, "errors": list[str], "halted": bool?}
     """
@@ -119,6 +125,30 @@ def run_pre_fomc(
                 )
                 conn.commit()
             return {"entries_placed": 0, "errors": [], "halted": False}
+
+        # Optional VIX regime filter: skip if prior trading day's VIX close <= vix_min.
+        if vix_min is not None and vix_daily is not None and len(vix_daily) > 0:
+            idx = vix_daily.index
+            vix_dates = (idx.tz_convert("America/New_York").date
+                         if idx.tz is not None else idx.date)
+            vix_dates = list(vix_dates)
+            prior_close: float | None = None
+            for d, c in zip(reversed(vix_dates), reversed(vix_daily["close"].tolist())):
+                if d < ny_today:
+                    prior_close = float(c)
+                    break
+            if prior_close is None or prior_close <= float(vix_min):
+                reason = (f"VIX prior close {prior_close:.2f} <= {vix_min} (skip)"
+                          if prior_close is not None else "VIX prior close unavailable")
+                finished_at = datetime.now(timezone.utc).isoformat()
+                with sqlite3.connect(db_path) as conn:
+                    conn.execute(
+                        """UPDATE bot_runs SET finished_at_utc=?, status='success',
+                           error_message=?, entries_placed=0 WHERE id=?""",
+                        (finished_at, reason, run_id),
+                    )
+                    conn.commit()
+                return {"entries_placed": 0, "errors": [reason], "halted": False}
 
         account = broker.get_account()
         circuit = check_circuit(db_path=db_path, alpaca_account=account, now_utc=now_utc)
