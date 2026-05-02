@@ -9,6 +9,8 @@ from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 from alpaca.trading.client import TradingClient
+from alpaca.trading.enums import OrderClass, OrderSide, TimeInForce
+from alpaca.trading.requests import MarketOrderRequest, StopLossRequest, TakeProfitRequest
 
 
 class AlpacaClient:
@@ -80,3 +82,26 @@ class AlpacaClient:
         if isinstance(df.index, pd.MultiIndex):
             df = df.reset_index(level=0, drop=True)
         return df
+
+    def submit_bracket_buy(
+        self,
+        symbol: str,
+        qty: int,
+        stop_price: float,
+        target_price: float,
+    ) -> dict[str, str]:
+        """Submit a bracket BUY: market entry + stop + take-profit children."""
+        req = MarketOrderRequest(
+            symbol=symbol,
+            qty=qty,
+            side=OrderSide.BUY,
+            time_in_force=TimeInForce.DAY,
+            order_class=OrderClass.BRACKET,
+            take_profit=TakeProfitRequest(limit_price=round(float(target_price), 2)),
+            stop_loss=StopLossRequest(stop_price=round(float(stop_price), 2)),
+        )
+        order = self._trading.submit_order(req)
+        return {
+            "entry_order_id": str(order.id),
+            "client_order_id": str(order.client_order_id),
+        }
