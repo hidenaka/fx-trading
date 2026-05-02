@@ -28,7 +28,6 @@ from equity_trading.src.strategy.strategies.gap_fill import GapFillStrategy
 from equity_trading.src.strategy.strategies.last_hour_momentum import LastHourMomentumStrategy
 from equity_trading.src.strategy.strategies.opening_range_breakout import OpeningRangeBreakoutStrategy
 from equity_trading.src.strategy.strategies.overnight_hold import OvernightHoldStrategy
-from equity_trading.src.strategy.strategies.pre_fomc import PreFOMCDriftStrategy
 
 
 # RTH-validated strategies (2019-05–2026-05, 78 bars/day, post-fix low/high stop modeling).
@@ -38,17 +37,23 @@ from equity_trading.src.strategy.strategies.pre_fomc import PreFOMCDriftStrategy
 #   - 0.10% for pre-FOMC (intraday market orders both legs)
 #
 # Format: (StrategyClass, symbol, params, label, cost_pct)
+#
+# 敏腕モード v2 (Pre-FOMC dropped 2026-05-02 after multi-window stability test).
+# Pre-FOMC drift was positive on 7-yr aggregate (+30.83 sum on 3x ETFs) but
+# WR collapsed to 0/5 in 2024-2026 — likely the 24h pre-announcement drift
+# anomaly is decaying / arbitraged. Removing Pre-FOMC shifts the portfolio
+# from 3/4 windows positive (worst -4.96%/yr) to 4/4 windows positive
+# (worst +6.70%/yr) at the cost of slightly higher tail DD.
+#
+# Variant test result (2026-05-02):
+#   V0 full ensemble  : avg ann +6.38%, worst -4.96%, 7-yr +13.04%
+#   V3 LHM+ORB (this) : avg ann +9.45%, worst +6.70%, 7-yr +11.07%
 SELECTED = [
-    # ============= 敏腕モード: 3x leveraged ETFs =============
-    # Pre-FOMC drift via 3x ETFs. TECL is the standout (VIX > 22 → WR 70%, avg +1.555%).
-    (PreFOMCDriftStrategy,    "TECL", {"entry_bar_pos": 0, "_max_hold_bars": 130, "vix_min": 22}, "pre_fomc_TECL", 0.10),
-    (PreFOMCDriftStrategy,    "UPRO", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_UPRO", 0.10),
-    (PreFOMCDriftStrategy,    "UDOW", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_UDOW", 0.10),
-    # ORB 60-min on 3x ETFs (massive EV due to amplified intraday moves)
+    # ORB 60-min on 3x ETFs (TECL/TQQQ/TNA). 200d MA filter on prev close.
     (OpeningRangeBreakoutStrategy, "TECL", {"or_window_bars": 12}, "orb_TECL", 0.10),
     (OpeningRangeBreakoutStrategy, "TQQQ", {"or_window_bars": 12}, "orb_TQQQ", 0.10),
     (OpeningRangeBreakoutStrategy, "TNA",  {"or_window_bars": 12}, "orb_TNA",  0.10),
-    # Last-hour momentum on UPRO (only leveraged variant where LHM works)
+    # Last-hour momentum on 3x SPX/Dow (only leveraged variants where LHM works).
     (LastHourMomentumStrategy, "UPRO", {"threshold": 0.003, "_max_hold_bars": 60}, "lhm_UPRO", 0.10),
     (LastHourMomentumStrategy, "UDOW", {"threshold": 0.003, "_max_hold_bars": 60}, "lhm_UDOW", 0.10),
 ]

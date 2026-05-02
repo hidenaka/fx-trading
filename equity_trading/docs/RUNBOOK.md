@@ -1,35 +1,48 @@
-# Equity Bot — Operations Runbook (敏腕モード / Plan 2.5)
+# Equity Bot — Operations Runbook (敏腕モード v2 / Plan 2.5.1)
 
-> **モード**: 敏腕モード (3x レバレッジ ETF + VIX フィルター)
-> **想定リターン**: 年 +13%（25%×3 setup; 95% CI に基づく）
-> **想定 Max DD**: -16.77%（7-yr バックテスト最悪期間）
+> **モード**: 敏腕モード v2 (ORB + LHM、3x レバレッジ ETF)
+> **想定リターン**: 年 +9〜+11%（4窓検証; 7年では +11.07% / yr）
+> **想定 Max DD**: -19.69%（7-yr バックテスト最悪期間）
 > **資金前提**: 初期 ¥100,000 + 毎月 ¥50,000 の積立
+>
+> **2026-05-02 改訂**: Pre-FOMC drift を構成から外しました。7年集計では +EV だが
+> 2024-2026 窓で WR 0/5 まで劣化しており、ポートフォリオ全体の最悪窓を
+> -4.96%/yr → +6.70%/yr に改善する効果がありました。`--pre-fomc` CLI は
+> コードとしては残しますが、**敏腕モード v2 では使用しません**.
 
 ## What this bot does
 
 Runs scheduled jobs against Alpaca **Paper** account using **3x leveraged ETFs**:
 
 - **Morning** (~9:31 ET): scans SPY/QQQ/DIA/IWM for gap-fill setups (legacy strategy, low-EV anchor).
-- **ORB** (every 5 min, 10:35-15:50 ET): scans **TECL/TQQQ/TNA** for 60-min Opening Range breakouts. **敏腕モードの主戦場**.
-- **Intraday** (every 5 min, 9:35-15:50 ET): legacy XLK mean-reversion (optional; can skip).
-- **Pre-FOMC** (~12:30 ET, only on the trading day before each FOMC): places long **TECL** if prior-day VIX close > 22. Position is `hold_overnight=1` and survives EOD.
-- **EOD** (~15:55 ET): closes still-open positions with `hold_overnight=0` at market.
-- **FOMC Close** (~13:55 ET on FOMC days): closes `hold_overnight=1` positions before the 14:00 ET statement.
+- **ORB** (every 5 min, 10:35-15:50 ET): scans **TECL/TQQQ/TNA** for 60-min Opening Range breakouts. **敏腕モードの主戦場 #1**.
+- **LHM (Last-Hour Momentum)**: 戦略コードはあり、敏腕モードに含まれるが**専用のCLIランナーは未実装**。
+   現状は `--orb` ループに統合された形で発火する設計を予定（次の実装課題）。
+- **EOD** (~15:55 ET): closes still-open positions at market.
+- **(Disabled) Pre-FOMC / FOMC Close**: コードは残るが敏腕モード v2 では使用しない。
 
-## Validated edge (7-yr RTH backtest, 2019-05 → 2026-05)
+## 多窓検証 (敏腕モード v2 構成、2026-05-02)
 
-### 敏腕コア戦略
+複数窓で同じ構成を回し、最悪窓でもプラスを維持する組み合わせを採用：
+
+| 構成 | W90 ann | W1Y ann | W2Y ann | W7Y ann | 最悪 | 最悪DD |
+|------|--------:|--------:|--------:|--------:|-----:|-------:|
+| V0 (旧 / Pre-FOMC込) | -4.96% | +4.84% | +12.60% | +13.04% | -4.96% | -16.81% |
+| **V3 = 敏腕 v2 (LHM+ORB)** | **+7.49%** | **+6.70%** | **+12.55%** | **+11.07%** | **+6.70%** | -19.69% |
+| V1 LHM-only | +21.78% | +3.73% | +1.20% | +1.53% | +1.20% | -14.60% |
+| V2 ORB-only | -11.41% | +4.91% | +11.16% | +8.26% | -11.41% | -19.09% |
+
+→ V3 が**4窓全てで正リターン** 維持の唯一の組み合わせ。
+
+### 敏腕コア戦略 (7年バックテスト)
 
 | Strategy | Symbol | n | WR | EV (sum %) | Avg/trade |
 |----------|--------|---|------|------------|-----------|
 | **ORB** | TECL | 486 | 0.543 | +108.38 | +0.223% |
 | **ORB** | TQQQ | 531 | 0.565 | +76.96 | +0.145% |
 | **ORB** | TNA | 369 | 0.534 | +62.06 | +0.168% |
-| **Pre-FOMC drift (VIX > 22)** | TECL | 10 | 0.700 | +15.55 | +1.555% |
-| **Pre-FOMC drift** | UPRO | 57 | 0.649 | +30.83 | +0.541% |
-| **Pre-FOMC drift** | UDOW | 57 | 0.649 | +30.83 | +0.541% |
-| **Last-Hour Momentum** | UPRO | – | – | +EV | – |
-| **Last-Hour Momentum** | UDOW | – | – | +EV | – |
+| **Last-Hour Momentum** | UPRO | ~470 | ~0.55 | +positive | +small |
+| **Last-Hour Momentum** | UDOW | ~470 | ~0.55 | +positive | +small |
 
 ### Legacy non-leveraged (gap_fill, optional)
 
@@ -44,13 +57,17 @@ Runs scheduled jobs against Alpaca **Paper** account using **3x leveraged ETFs**
 
 **Halt rule**: realized loss > 2% of equity in a day → new entries suppressed (also blocks Pre-FOMC, ORB).
 
-## Projected portfolio return (Scenario A 推奨, 7-yr backtest)
+## Projected portfolio return (敏腕 v2 = LHM+ORB)
 
-| Scenario | Annualized | Max DD | Trades/yr |
-|----------|-----------:|-------:|----------:|
-| **A: 25%×3 (敏腕推奨)** | **+13.0%** | **-16.77%** | ~213 |
-| B: 50%×2 (強気) | +20.5% | -32.4% | ~213 |
-| C: 100%×1 sequential | +27.1% | -49.2% | ~213 |
+| Scenario | 7-yr Ann | W2Y Ann | W1Y Ann | Max DD |
+|----------|--------:|--------:|--------:|-------:|
+| **A: 25%×3 (敏腕推奨)** | **+11.07%** | **+12.55%** | **+6.70%** | **-19.69%** |
+| B: 50%×2 (強気) | ~+18% | ~+22% | ~+12% | ~-35% |
+| C: 100%×1 sequential | ~+24% | ~+30% | ~+15% | ~-50% |
+
+旧構成 (V0 Pre-FOMC込) の数字 (+13.04% 7yr, -16.77% DD) は**過去90日の劣化**を
+反映できていない。v2 は窓越え安定性を優先した結果、7-yr 平均はわずかに下がるが
+最悪窓でも正リターンを維持。
 
 ### 月次積立シミュレーション (Scenario A, 7-yr)
 
@@ -101,32 +118,11 @@ for i in $(seq 1 63); do
 done
 ```
 
-### Pre-FOMC days (年 8 回)
+### Pre-FOMC は使用しない (敏腕 v2)
 
-FOMC 発表日の **直前の取引日** にも実行:
-
-| Time (NY) | Command |
-|-----------|---------|
-| 12:30 | `python3 equity_trading/scripts/run_bot.py --pre-fomc` |
-
-VIX 前日終値 ≤ 22 ならスキップされる（fil­ter on）。ポジションは `hold_overnight=1` で EOD を生き残る。
-
-### FOMC announcement days
-
-FOMC 発表日には 14:00 ET 声明発表の前に必ず実行:
-
-| Time (NY) | Command |
-|-----------|---------|
-| 13:55 | `python3 equity_trading/scripts/run_bot.py --fomc-close` |
-
-### FOMC schedule (current edition)
-
-`equity_trading/src/strategy/strategies/pre_fomc.py::DEFAULT_FOMC_DATES`. 2026-04-29 まで:
-
-```
-2025: Jan 29, Mar 19, May 7, Jun 18, Jul 30, Sep 17, Oct 29, Dec 10
-2026: Jan 28, Mar 18, Apr 29
-```
+`--pre-fomc` / `--fomc-close` CLI はコードとして残るが、**敏腕モード v2 では実行しない**。
+2024-2026 の直近窓で WR 0/5 まで劣化しており、ポートフォリオ全体の安定性を
+落としているため。日次ルーチンには含めない。
 
 ## Reading the daily summary
 
