@@ -35,6 +35,7 @@ class PriceFetcher:
         self,
         broker: AlpacaClient,
         cache_dir: Path | str,
+        *,
         partition: str = "full",
     ) -> None:
         self.broker = broker
