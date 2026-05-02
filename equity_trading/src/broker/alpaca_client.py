@@ -105,3 +105,8 @@ class AlpacaClient:
             "entry_order_id": str(order.id),
             "client_order_id": str(order.client_order_id),
         }
+
+    def close_position(self, symbol: str) -> dict[str, str]:
+        """Close entire position in `symbol` at market. Cancels related bracket orders."""
+        order = self._trading.close_position(symbol)
+        return {"order_id": str(order.id), "qty": str(order.qty)}
