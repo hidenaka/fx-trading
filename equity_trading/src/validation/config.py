@@ -6,7 +6,7 @@ portfolio sizing, and gate thresholds. Eliminates dual-namespace bugs
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +54,10 @@ def load_variant_config(path: Path | str) -> VariantConfig:
     missing = REQUIRED_TOP_KEYS - raw.keys()
     if missing:
         raise ValueError(f"{path}: missing required keys: {sorted(missing)}")
+    if not isinstance(raw["strategies"], list):
+        raise ValueError(f"{path}: 'strategies' must be a list, got {type(raw['strategies']).__name__}")
+    if not isinstance(raw["gates"], dict):
+        raise ValueError(f"{path}: 'gates' must be a mapping, got {type(raw['gates']).__name__}")
     for s in raw["strategies"]:
         cls_name = s.get("class")
         if cls_name not in STRATEGY_REGISTRY:

@@ -91,6 +91,25 @@ gates:
         load_variant_config(p)
 
 
+def test_load_rejects_strategies_being_none(tmp_path):
+    body = """
+variant_id: v
+description: ""
+strategies:
+portfolio:
+  position_size_pct: 0.25
+  max_concurrent: 3
+  starting_equity_usd: 100000
+gates:
+  oos: {holdout_start: "2024-05-01", holdout_end: "2026-05-01", min_outperformance_pct: 0.0}
+  tail_risk: {max_single_trade_loss_pct: 5.0, max_portfolio_dd_pct: 20.0, max_rolling_30d_loss_pct: 10.0}
+  sample_size: {min_holdout_trades: 30}
+"""
+    p = _write_config(tmp_path, body)
+    with pytest.raises(ValueError, match="strategies"):
+        load_variant_config(p)
+
+
 def test_resolve_strategy_class_returns_real_class(tmp_path):
     body = """
 variant_id: test
