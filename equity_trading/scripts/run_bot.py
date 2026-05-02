@@ -35,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--morning", action="store_true", help="Run gap_fill at market open")
     mode.add_argument("--intraday", action="store_true", help="Run mean_reversion (every 5min)")
     mode.add_argument("--eod", action="store_true", help="Close positions, write summary")
+    mode.add_argument("--check", action="store_true", help="Connectivity check only (no orders, no DB writes)")
     parser.add_argument("--db-path", default=DEFAULT_DB_PATH)
     parser.add_argument("--cache-dir", default=DEFAULT_CACHE_DIR)
     parser.add_argument("--symbols", nargs="+", default=DEFAULT_SYMBOLS)
@@ -61,15 +62,27 @@ def main(argv: list[str] | None = None) -> int:
         print(msg, file=sys.stderr)
         return 2
 
-    db_path = Path(args.db_path)
-    init_database(db_path)
-
     cache_dir = Path(args.cache_dir)
     broker = AlpacaClient(
         api_key=cfg.alpaca_api_key,
         secret_key=cfg.alpaca_secret_key,
         base_url=base_url,
     )
+
+    if args.check:
+        account = broker.get_account()
+        print(f"[run_bot] Connected to Alpaca Paper")
+        print(f"  Account: {account['account_number']}")
+        print(f"  Status: {account['status']}")
+        print(f"  Equity: ${account['equity']:,.2f}")
+        print(f"  Cash: ${account['cash']:,.2f}")
+        print(f"  Buying power: ${account['buying_power']:,.2f}")
+        print(f"  Pattern day trader: {account['pattern_day_trader']}")
+        return 0
+
+    db_path = Path(args.db_path)
+    init_database(db_path)
+
     fetcher = PriceFetcher(broker=broker, cache_dir=cache_dir)
 
     now_utc = datetime.now(timezone.utc)

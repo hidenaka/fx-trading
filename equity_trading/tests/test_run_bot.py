@@ -91,3 +91,28 @@ def test_run_bot_eod_mode_dispatches(paper_env, monkeypatch):
         rc = run_bot.main(["--eod", "--db-path", str(paper_env / "t.db")])
     assert rc == 0
     assert called["eod"] is True
+
+
+def test_run_bot_check_mode_prints_account(paper_env, monkeypatch, capsys):
+    from equity_trading.scripts import run_bot
+
+    with patch(
+        "equity_trading.src.broker.alpaca_client.TradingClient"
+    ) as mock_trading_cls, patch(
+        "equity_trading.src.broker.alpaca_client.StockHistoricalDataClient"
+    ):
+        mock_trading_cls.return_value.get_account.return_value = MagicMock(
+            account_number="PA12345",
+            status="ACTIVE",
+            currency="USD",
+            cash="9876.54",
+            equity="10100.00",
+            buying_power="40400.00",
+            pattern_day_trader=False,
+        )
+        rc = run_bot.main(["--check"])
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "PA12345" in out
+    assert "10,100" in out or "10100" in out
