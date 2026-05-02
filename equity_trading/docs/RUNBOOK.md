@@ -26,6 +26,42 @@ Runs scheduled jobs against Alpaca **Paper** account using **3x leveraged ETFs**
 - **EOD** (~15:55 ET): closes still-open positions at market.
 - **(Disabled) Pre-FOMC / FOMC Close**: コードは残るが敏腕モード v2 では使用しない。
 
+## Strategy change validation (敏腕 v3 framework)
+
+Before deploying any strategy variant change to paper trading, run the
+validation framework:
+
+```
+python3 -m equity_trading.src.validation \
+    --variant equity_trading/configs/<new_variant>.yaml \
+    --baseline equity_trading/configs/<current_baseline>.yaml \
+    --output equity_trading/phase0/validation/$(date +%Y-%m-%d)_<variant_id>.md
+```
+
+The framework:
+1. Verifies `data/prices/manifest.json` matches on-disk parquets (rejects start otherwise)
+2. Reads variant + baseline strategy configs (YAML, single source of truth)
+3. Loads `data/prices/holdout/` via `EvaluationContext` (every read is logged to `holdout_access.jsonl`)
+4. Runs portfolio simulation on holdout for both variant and baseline
+5. Runs three required gates: OOS comparison, tail risk, sample size
+6. Writes a markdown report with PASS/FAIL/WARN per gate and a headline (APPROVE / REVIEW / REJECT)
+
+Required gate thresholds (from variant config):
+- **OOS**: variant annualized return must be ≥ baseline; variant drawdown must be ≤ 1.2x baseline
+- **Tail risk**: worst single trade ≤ 5% loss, portfolio MaxDD ≤ 20%, 30-day rolling ≤ 10%
+- **Sample size**: ≥ 30 trades on holdout
+
+A REJECT result blocks deployment. Iterate on `data/prices/train/` only;
+**never modify code based on holdout observations** (that is the curve-fit
+trap this framework prevents).
+
+After deployment, the holdout is "burned" — accumulate new paper-trade
+data and refresh the holdout cutoff before the next variant test.
+
+(Real-world demonstration: see `equity_trading/phase0/validation/2026-05-03_orb_v2_1.md`
+for the first validation run, which REJECTED an in-sample-optimized variant —
+exactly what this framework is designed to catch.)
+
 ## 多窓検証 (敏腕モード v2 構成、2026-05-02)
 
 複数窓で同じ構成を回し、最悪窓でもプラスを維持する組み合わせを採用：
