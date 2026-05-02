@@ -1,0 +1,35 @@
+variant_id: orb_tight_v2_1
+description: |
+  ORB exits tightened to stop=OR_low+0.25R, target=OR_high+2R based on
+  a 7-yr in-sample sweep of (stop_mult, target_mult). This config is the
+  unit being validated on the holdout.
+parent_baseline: orb_default_v0
+strategies:
+  - class: OpeningRangeBreakoutStrategy
+    symbols: [TECL, TQQQ, TNA]
+    params:
+      or_window_bars: 12
+      stop_mult: 0.25
+      target_mult: 2.0
+      cost_pct: 0.10
+  - class: LastHourMomentumStrategy
+    symbols: [UPRO, UDOW]
+    params:
+      threshold: 0.003
+      _max_hold_bars: 60
+      cost_pct: 0.10
+portfolio:
+  position_size_pct: 0.25
+  max_concurrent: 3
+  starting_equity_usd: 100000
+gates:
+  oos:
+    holdout_start: "2024-05-01"
+    holdout_end: "2026-05-01"
+    min_outperformance_pct: 0.0
+  tail_risk:
+    max_single_trade_loss_pct: 5.0
+    max_portfolio_dd_pct: 20.0
+    max_rolling_30d_loss_pct: 10.0
+  sample_size:
+    min_holdout_trades: 30
