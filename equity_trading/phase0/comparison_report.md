@@ -217,22 +217,58 @@
 
 **Best for intraday_momentum:** DIA / `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.003}` → EV 1.44 (WR 0.636, Trades 11)
 
+## 戦略: pre_fomc_drift
+
+| Symbol | Params | Trades | Wins | Win Rate | Avg P&L | Expected (P&L×Count) |
+|--------|--------|--------|------|----------|---------|----------------------|
+| SPY | `{"_max_hold_bars": 129, "entry_bar_pos": 0}` | 16 | 6 | 0.375 | -0.192% | -3.06 |
+| SPY | `{"_max_hold_bars": 95, "entry_bar_pos": 36}` | 16 | 6 | 0.375 | -0.158% | -2.53 |
+| QQQ | `{"_max_hold_bars": 129, "entry_bar_pos": 0}` | 16 | 8 | 0.500 | -0.104% | -1.67 |
+| QQQ | `{"_max_hold_bars": 95, "entry_bar_pos": 36}` | 16 | 8 | 0.500 | -0.072% | -1.15 |
+| IWM | `{"_max_hold_bars": 129, "entry_bar_pos": 0}` | 16 | 4 | 0.250 | -0.191% | -3.06 |
+| IWM | `{"_max_hold_bars": 95, "entry_bar_pos": 36}` | 16 | 8 | 0.500 | -0.141% | -2.25 |
+| DIA | `{"_max_hold_bars": 129, "entry_bar_pos": 0}` | 16 | 7 | 0.438 | -0.102% | -1.63 |
+| DIA | `{"_max_hold_bars": 95, "entry_bar_pos": 36}` | 16 | 6 | 0.375 | -0.142% | -2.28 |
+| XLK | `{"_max_hold_bars": 129, "entry_bar_pos": 0}` | 16 | 9 | 0.562 | 0.385% | 6.16 |
+| XLK | `{"_max_hold_bars": 95, "entry_bar_pos": 36}` | 16 | 12 | 0.750 | 0.615% | 9.84 |
+
+**Best for pre_fomc_drift:** XLK / `{"_max_hold_bars": 95, "entry_bar_pos": 36}` → EV 9.84 (WR 0.750, Trades 16)
+
+## 戦略: turn_of_month
+
+| Symbol | Params | Trades | Wins | Win Rate | Avg P&L | Expected (P&L×Count) |
+|--------|--------|--------|------|----------|---------|----------------------|
+| SPY | `{"_max_hold_bars": 70, "entry_bar_pos": 0}` | 94 | 40 | 0.426 | -0.111% | -10.40 |
+| SPY | `{"_max_hold_bars": 60, "entry_bar_pos": 12}` | 94 | 41 | 0.436 | -0.082% | -7.68 |
+| QQQ | `{"_max_hold_bars": 70, "entry_bar_pos": 0}` | 94 | 46 | 0.489 | -0.089% | -8.38 |
+| QQQ | `{"_max_hold_bars": 60, "entry_bar_pos": 12}` | 94 | 48 | 0.511 | -0.035% | -3.30 |
+| IWM | `{"_max_hold_bars": 70, "entry_bar_pos": 0}` | 94 | 53 | 0.564 | -0.110% | -10.37 |
+| IWM | `{"_max_hold_bars": 60, "entry_bar_pos": 12}` | 94 | 49 | 0.521 | -0.054% | -5.11 |
+| DIA | `{"_max_hold_bars": 70, "entry_bar_pos": 0}` | 94 | 42 | 0.447 | -0.074% | -6.91 |
+| DIA | `{"_max_hold_bars": 60, "entry_bar_pos": 12}` | 94 | 42 | 0.447 | -0.074% | -6.96 |
+| XLK | `{"_max_hold_bars": 70, "entry_bar_pos": 0}` | 93 | 46 | 0.495 | -0.111% | -10.35 |
+| XLK | `{"_max_hold_bars": 60, "entry_bar_pos": 12}` | 93 | 48 | 0.516 | -0.035% | -3.22 |
+
+**Best for turn_of_month:** XLK / `{"_max_hold_bars": 60, "entry_bar_pos": 12}` → EV -3.22 (WR 0.516, Trades 93)
+
 ## 横断比較：戦略別ベスト
 
 | Rank | Strategy | Symbol | Params | EV | Win Rate | Trades |
 |------|----------|--------|--------|-----|----------|--------|
-| 1 | gap_fill | QQQ | `{"gap_threshold": 0.003, "stop_extension": 0.005}` | 7.84 | 0.644 | 45 |
-| 2 | intraday_momentum | DIA | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.003}` | 1.44 | 0.636 | 11 |
-| 3 | mean_reversion | XLK | `{"threshold": 0.4}` | 0.69 | 0.611 | 36 |
-| 4 | env_dependent_reversion | SPY | `{"threshold": 0.5}` | 0.14 | 1.000 | 3 |
-| 5 | vwap_scalp | SPY | `{"k_entry": 1.5}` | 0.09 | 1.000 | 2 |
-| 6 | analysis_driven_reversion | XLK | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` | -2.73 | 0.426 | 47 |
-| 7 | multi_timeframe | IWM | `{"rsi_15min_threshold": 30.0, "rsi_5min_threshold": 25.0, "rsi_60min_threshold": 35.0}` | -3.22 | 0.481 | 54 |
-| 8 | opening_range_breakout | XLK | `{"or_window_bars": 6}` | -9.19 | 0.390 | 136 |
-| 9 | momentum_breakout | XLK | `{"breakout_period": 78, "volume_multiplier": 2.0}` | -12.52 | 0.436 | 165 |
-| 10 | trend_follow | XLK | `{"breakout_period": 50, "rsi_threshold": 55.0}` | -33.15 | 0.409 | 399 |
+| 1 | pre_fomc_drift | XLK | `{"_max_hold_bars": 95, "entry_bar_pos": 36}` | 9.84 | 0.750 | 16 |
+| 2 | gap_fill | QQQ | `{"gap_threshold": 0.003, "stop_extension": 0.005}` | 7.84 | 0.644 | 45 |
+| 3 | intraday_momentum | DIA | `{"_max_hold_bars": 11, "entry_bar_pos": 65, "threshold": 0.003}` | 1.44 | 0.636 | 11 |
+| 4 | mean_reversion | XLK | `{"threshold": 0.4}` | 0.69 | 0.611 | 36 |
+| 5 | env_dependent_reversion | SPY | `{"threshold": 0.5}` | 0.14 | 1.000 | 3 |
+| 6 | vwap_scalp | SPY | `{"k_entry": 1.5}` | 0.09 | 1.000 | 2 |
+| 7 | analysis_driven_reversion | XLK | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` | -2.73 | 0.426 | 47 |
+| 8 | turn_of_month | XLK | `{"_max_hold_bars": 60, "entry_bar_pos": 12}` | -3.22 | 0.516 | 93 |
+| 9 | multi_timeframe | IWM | `{"rsi_15min_threshold": 30.0, "rsi_5min_threshold": 25.0, "rsi_60min_threshold": 35.0}` | -3.22 | 0.481 | 54 |
+| 10 | opening_range_breakout | XLK | `{"or_window_bars": 6}` | -9.19 | 0.390 | 136 |
+| 11 | momentum_breakout | XLK | `{"breakout_period": 78, "volume_multiplier": 2.0}` | -12.52 | 0.436 | 165 |
+| 12 | trend_follow | XLK | `{"breakout_period": 50, "rsi_threshold": 55.0}` | -33.15 | 0.409 | 399 |
 
-## 推奨：**gap_fill** （QQQ、EV 7.84）
+## 推奨：**pre_fomc_drift** （XLK、EV 9.84）
 
 ## 次のステップ
 

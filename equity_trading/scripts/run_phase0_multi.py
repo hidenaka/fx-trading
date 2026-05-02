@@ -32,7 +32,9 @@ from equity_trading.src.strategy.strategies.mean_reversion import MeanReversionS
 from equity_trading.src.strategy.strategies.momentum_breakout import MomentumBreakoutStrategy
 from equity_trading.src.strategy.strategies.multi_timeframe import MultiTimeframeStrategy
 from equity_trading.src.strategy.strategies.opening_range_breakout import OpeningRangeBreakoutStrategy
+from equity_trading.src.strategy.strategies.pre_fomc import PreFOMCDriftStrategy
 from equity_trading.src.strategy.strategies.trend_follow import TrendFollowStrategy
+from equity_trading.src.strategy.strategies.turn_of_month import TurnOfMonthStrategy
 from equity_trading.src.strategy.strategies.vwap_scalp import VWAPScalpStrategy
 
 
@@ -88,6 +90,18 @@ PARAM_GRID = {
         # last-hour variant: entry at ~15:00, hold 1h
         {"threshold": 0.001, "entry_bar_pos": 65, "_max_hold_bars": 11},
         {"threshold": 0.003, "entry_bar_pos": 65, "_max_hold_bars": 11},
+    ],
+    "pre_fomc_drift": [
+        # Enter ~9:35 ET on pre-FOMC day; exit ~14:00 ET on FOMC day (24h drift window).
+        {"entry_bar_pos": 0, "_max_hold_bars": 129},
+        # Variant: enter midday on pre-FOMC day, exit at 14:00 ET FOMC (~6 hr hold)
+        {"entry_bar_pos": 36, "_max_hold_bars": 95},
+    ],
+    "turn_of_month": [
+        # Open-to-near-close hold on each TOM day
+        {"entry_bar_pos": 0, "_max_hold_bars": 70},
+        # Late-morning entry, end-of-day exit
+        {"entry_bar_pos": 12, "_max_hold_bars": 60},
     ],
 }
 
@@ -151,6 +165,8 @@ def main(
         OpeningRangeBreakoutStrategy(),
         GapFillStrategy(),
         IntradayMomentumStrategy(),
+        PreFOMCDriftStrategy(),
+        TurnOfMonthStrategy(),
     ]
     results = run_all_strategies(
         strategies=strategies,
