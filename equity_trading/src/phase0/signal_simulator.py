@@ -86,7 +86,10 @@ def simulate_one_threshold(
     stop_pct = atr_pct * stop_multiplier / 100.0
     target_pct = atr_pct * target_multiplier / 100.0
 
-    closes = bars_5min["close"].values
+    opens = bars_5min["open"].to_numpy()
+    highs = bars_5min["high"].to_numpy()
+    lows = bars_5min["low"].to_numpy()
+    closes = bars_5min["close"].to_numpy()
     n = len(closes)
     trades: list[float] = []
     in_position = False
@@ -99,20 +102,29 @@ def simulate_one_threshold(
             entry_idx = i + 1
             if entry_idx >= n:
                 break
-            entry_price = closes[entry_idx]
-        elif in_position:
-            current = closes[i]
+            entry_price = float(closes[entry_idx])
+        elif in_position and i > entry_idx:
             stop_price = entry_price * (1 - stop_pct)
             target_price = entry_price * (1 + target_pct)
-            if current <= stop_price:
+            open_p = float(opens[i])
+            low_p = float(lows[i])
+            high_p = float(highs[i])
+            # Stop checks first (conservative: stop wins over target intra-bar)
+            if open_p <= stop_price:
+                trades.append((open_p - entry_price) / entry_price - cost_pct / 100.0)
+                in_position = False
+            elif low_p <= stop_price:
                 trades.append(-stop_pct - cost_pct / 100.0)
                 in_position = False
-            elif current >= target_price:
+            elif open_p >= target_price:
+                trades.append((open_p - entry_price) / entry_price - cost_pct / 100.0)
+                in_position = False
+            elif high_p >= target_price:
                 trades.append(target_pct - cost_pct / 100.0)
                 in_position = False
-            elif i - entry_idx > 78:
-                pnl_pct = (current - entry_price) / entry_price - cost_pct / 100.0
-                trades.append(pnl_pct)
+            elif i - entry_idx >= 78:
+                close_p = float(closes[i])
+                trades.append((close_p - entry_price) / entry_price - cost_pct / 100.0)
                 in_position = False
 
     trade_count = len(trades)

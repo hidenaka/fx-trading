@@ -1,4 +1,13 @@
-"""価格データの取得とローカルキャッシュ（Parquet形式）."""
+"""価格データの取得とローカルキャッシュ（Parquet形式）.
+
+Critical: cached parquet files include pre-market and after-hours bars
+(roughly 192 bars/day vs the regular-hours 78 bars). Strategies that key
+off "first bar of day" or specific bar positions must operate on
+regular-trading-hours-only data, otherwise bar 0 is 4:00 ET pre-market.
+
+The fetch method takes `regular_hours_only` (default True) to filter
+post-fetch. Set to False only for diagnostic comparisons.
+"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -7,6 +16,16 @@ from pathlib import Path
 import pandas as pd
 
 from equity_trading.src.broker.alpaca_client import AlpacaClient
+
+
+def filter_regular_hours(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only US regular trading hours bars (9:30-16:00 ET, 78 bars/day at 5min)."""
+    if df is None or len(df) == 0 or df.index.tz is None:
+        return df
+    ny = df.index.tz_convert("America/New_York")
+    minutes_since_open = (ny.hour * 60 + ny.minute) - (9 * 60 + 30)
+    mask = (minutes_since_open >= 0) & (minutes_since_open < 6 * 60 + 30)
+    return df[mask]
 
 
 class PriceFetcher:
@@ -23,23 +42,31 @@ class PriceFetcher:
         start: datetime,
         end: datetime,
         timeframe_minutes: int,
+        regular_hours_only: bool = True,
     ) -> pd.DataFrame:
         """過去バーを取得.
 
         ローカルキャッシュ（Parquet）に同条件のファイルがあれば優先利用、
         なければブローカー API を叩いて取得＆保存。
+
+        Args:
+            regular_hours_only: True (default) で 9:30-16:00 ET の bars に絞る。
+                pre-market/after-hours は流動性が低く、ブラケット注文が機能しないため、
+                バックテストとライブの両方で RTH-only に統一する。
         """
         cache_path = self._cache_key(symbol, start, end, timeframe_minutes)
         if cache_path.exists():
-            return pd.read_parquet(cache_path)
-
-        df = self.broker.get_historical_bars(
-            symbol=symbol,
-            start=start,
-            end=end,
-            timeframe_minutes=timeframe_minutes,
-        )
-        df.to_parquet(cache_path)
+            df = pd.read_parquet(cache_path)
+        else:
+            df = self.broker.get_historical_bars(
+                symbol=symbol,
+                start=start,
+                end=end,
+                timeframe_minutes=timeframe_minutes,
+            )
+            df.to_parquet(cache_path)
+        if regular_hours_only and timeframe_minutes < 1440:
+            df = filter_regular_hours(df)
         return df
 
     def _cache_key(

@@ -27,6 +27,53 @@ def _bar(price: float, when: pd.Timestamp) -> pd.DataFrame:
 # === pre_fomc_runner ===
 
 
+def test_pre_fomc_recognises_friday_before_monday_fomc(tmp_path):
+    """Bug regression: FOMC on Monday → pre-FOMC must be Friday (not Sunday).
+
+    Previously _is_pre_fomc_day used calendar -1 day so a Friday pre-FOMC
+    paired with a Monday FOMC was missed.
+    """
+    db = tmp_path / "trades.sqlite"
+    init_database(db)
+
+    fetcher = MagicMock()
+    fetcher.fetch.return_value = _bar(price=200.0,
+                                      when=pd.Timestamp("2026-06-12 16:30", tz="UTC"))
+    broker = MagicMock()
+    broker.get_account.return_value = _account()
+    broker.submit_bracket_buy.return_value = {"entry_order_id": "ord-001"}
+
+    # Synthetic: FOMC on Monday 2026-06-15. Friday before is 2026-06-12.
+    summary = run_pre_fomc(
+        symbol="XLK", db_path=db, broker=broker, fetcher=fetcher,
+        now_utc=datetime(2026, 6, 12, 16, 30, tzinfo=timezone.utc),
+        fomc_dates=[dt.date(2026, 6, 15)],
+    )
+    assert summary["entries_placed"] == 1
+
+
+def test_pre_fomc_handles_holiday_before_fomc(tmp_path):
+    """If FOMC is the trading day after a federal holiday (e.g. MLK Mon 2025-01-20,
+    FOMC Tue Jan 21), pre-FOMC trading day = previous Friday (Jan 17).
+    """
+    db = tmp_path / "trades.sqlite"
+    init_database(db)
+    fetcher = MagicMock()
+    fetcher.fetch.return_value = _bar(price=200.0,
+                                      when=pd.Timestamp("2025-01-17 17:30", tz="UTC"))
+    broker = MagicMock()
+    broker.get_account.return_value = _account()
+    broker.submit_bracket_buy.return_value = {"entry_order_id": "ord-001"}
+
+    # Synthetic: FOMC on Tue 2025-01-21 (the actual day after MLK Mon Jan 20).
+    summary = run_pre_fomc(
+        symbol="XLK", db_path=db, broker=broker, fetcher=fetcher,
+        now_utc=datetime(2025, 1, 17, 17, 30, tzinfo=timezone.utc),
+        fomc_dates=[dt.date(2025, 1, 21)],
+    )
+    assert summary["entries_placed"] == 1
+
+
 def test_no_entry_on_non_pre_fomc_day(tmp_path):
     """If today is NOT the trading day before an FOMC announcement, no entry."""
     db = tmp_path / "trades.sqlite"

@@ -25,18 +25,26 @@ from equity_trading.src.broker.alpaca_client import AlpacaClient
 from equity_trading.src.config import load_config
 from equity_trading.src.data.price_fetcher import PriceFetcher
 from equity_trading.src.strategy.strategies.gap_fill import GapFillStrategy
-from equity_trading.src.strategy.strategies.mean_reversion import MeanReversionStrategy
+from equity_trading.src.strategy.strategies.opening_range_breakout import OpeningRangeBreakoutStrategy
 from equity_trading.src.strategy.strategies.pre_fomc import PreFOMCDriftStrategy
 
 
-# Long-data validated strategies (2019-05-01 to 2026-05-01, post-fix simulator).
-# EV > 0 with n >= 30 on 7-yr data. Dropped XLK gap_fill (was 2024-2026 fluke).
+# RTH-validated strategies (2019-05–2026-05, 78 bars/day, post-fix low/high stop modeling).
+# Earlier "ext-hours" results were inflated by pre-market fills; using RTH-only
+# data exposes which strategies have a real edge in tradable regular-hours bars.
+#
+# Survivors (7-yr EV > 0, n >= 30):
+#   - PreFOMCDrift on all 5 ETFs (morning entry, hold ~24h to FOMC announcement)
+#   - OpeningRangeBreakout 60-min OR window on QQQ
 SELECTED = [
-    (GapFillStrategy,        "QQQ", {"gap_threshold": 0.003, "stop_extension": 0.005}, "gap_fill_QQQ"),
-    (GapFillStrategy,        "QQQ", {"gap_threshold": 0.005, "stop_extension": 0.005}, "gap_fill_QQQ_tight"),
-    (GapFillStrategy,        "SPY", {"gap_threshold": 0.005, "stop_extension": 0.005}, "gap_fill_SPY"),
-    (GapFillStrategy,        "DIA", {"gap_threshold": 0.005, "stop_extension": 0.005}, "gap_fill_DIA"),
-    (PreFOMCDriftStrategy,   "XLK", {"entry_bar_pos": 36, "_max_hold_bars": 95},       "pre_fomc_XLK"),
+    # Pre-FOMC: morning entry (bar 0 = 9:30 ET signal, fill 9:35; exit ~14:00 ET FOMC day)
+    (PreFOMCDriftStrategy,    "XLK", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_XLK"),
+    (PreFOMCDriftStrategy,    "QQQ", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_QQQ"),
+    (PreFOMCDriftStrategy,    "IWM", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_IWM"),
+    (PreFOMCDriftStrategy,    "SPY", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_SPY"),
+    (PreFOMCDriftStrategy,    "DIA", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_DIA"),
+    # ORB 60-min on QQQ (only RTH gap_fill / OR variant with positive EV at n>30)
+    (OpeningRangeBreakoutStrategy, "QQQ", {"or_window_bars": 12}, "orb_60min_QQQ"),
 ]
 
 
@@ -70,6 +78,15 @@ def collect_all_trades(symbols: list[str], data_map, atr_map) -> pd.DataFrame:
     out = pd.concat(all_trades, ignore_index=True)
     out["entry_ts"] = pd.to_datetime(out["entry_ts"], utc=True)
     out["exit_ts"] = pd.to_datetime(out["exit_ts"], utc=True)
+    # Safety net: drop any trades that have identical (symbol, entry_ts) across
+    # different strategy_labels — these are duplicates from overlapping subset
+    # configurations. Keep the first by sort order. Live position_manager already
+    # blocks same-symbol re-entry, so the simulator must mirror that.
+    before = len(out)
+    out = out.drop_duplicates(subset=["symbol", "entry_ts"], keep="first")
+    dropped = before - len(out)
+    if dropped > 0:
+        print(f"  [dedup] dropped {dropped} duplicate (symbol, entry_ts) rows")
     out = out.sort_values("entry_ts").reset_index(drop=True)
     return out
 
@@ -108,8 +125,13 @@ def simulate_portfolio(
         if len(open_positions) >= max_concurrent:
             rejected_count += 1
             continue
+        # Mirror live position_manager: block re-entry on a symbol already open.
+        if any(p.get("symbol") == t["symbol"] for p in open_positions):
+            rejected_count += 1
+            continue
         position_dollars = equity * position_size_pct
         open_positions.append({
+            "symbol": t["symbol"],
             "exit_ts": t["exit_ts"],
             "position_dollars": position_dollars,
             "pnl_pct": t["pnl_pct"],

@@ -83,24 +83,24 @@ PARAM_GRID = {
         {"gap_threshold": 0.010, "stop_extension": 0.010},  # 1.0% gap, 1.0% stop
     ],
     "intraday_momentum": [
-        # entry_bar_pos=71 → fill at bar 72 close (~15:35 ET); _max_hold_bars=5 → exit ~16:00
-        {"threshold": 0.0, "entry_bar_pos": 71, "_max_hold_bars": 5},      # any positive morning
-        {"threshold": 0.001, "entry_bar_pos": 71, "_max_hold_bars": 5},    # +0.1% morning
-        {"threshold": 0.003, "entry_bar_pos": 71, "_max_hold_bars": 5},    # +0.3% morning
-        # last-hour variant: entry at ~15:00, hold 1h
+        # RTH bars: 78 per day. bar 71 = 15:25 ET, bar 65 = 14:55 ET.
+        {"threshold": 0.001, "entry_bar_pos": 71, "_max_hold_bars": 5},
+        {"threshold": 0.003, "entry_bar_pos": 71, "_max_hold_bars": 5},
         {"threshold": 0.001, "entry_bar_pos": 65, "_max_hold_bars": 11},
         {"threshold": 0.003, "entry_bar_pos": 65, "_max_hold_bars": 11},
     ],
     "pre_fomc_drift": [
-        # Enter ~9:35 ET on pre-FOMC day; exit ~14:00 ET on FOMC day (24h drift window).
-        {"entry_bar_pos": 0, "_max_hold_bars": 129},
-        # Variant: enter midday on pre-FOMC day, exit at 14:00 ET FOMC (~6 hr hold)
-        {"entry_bar_pos": 36, "_max_hold_bars": 95},
+        # RTH bars: bar 0 = 9:30 ET, bar 36 = 12:30 ET. 78 bars/day.
+        # Entry at bar 1 (9:35 ET); time-exit on day 2 bar 53 (= 14:00 ET).
+        # Hold span: 78 - 1 + 53 = 130 RTH bars.
+        {"entry_bar_pos": 0, "_max_hold_bars": 130},
+        # Midday entry: bar 37 (12:35 ET) → day-2 bar 53. Hold = 78-37+53 = 94.
+        {"entry_bar_pos": 36, "_max_hold_bars": 94},
+        # Same-day midday → end of pre-FOMC day (no overnight)
+        {"entry_bar_pos": 36, "_max_hold_bars": 41},
     ],
     "turn_of_month": [
-        # Open-to-near-close hold on each TOM day
         {"entry_bar_pos": 0, "_max_hold_bars": 70},
-        # Late-morning entry, end-of-day exit
         {"entry_bar_pos": 12, "_max_hold_bars": 60},
     ],
 }

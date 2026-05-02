@@ -9,15 +9,20 @@ Two entry points:
 
 Reference: Lucca-Moench (J.Finance 2015) — the 24h preceding FOMC announcements
 account for >80% of equity premium 1994-2011. Effect is weaker post-2015 but
-backtest 2024-05–2026-05 still shows EV +9.84 (WR 0.750, n=16) on XLK.
+7-yr (2019-2026) backtest still shows EV +30.83 (WR 0.649, n=57) on XLK.
 """
 from __future__ import annotations
 
 import datetime as dt
 import sqlite3
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Sequence
+
+import pandas as pd
+from pandas.tseries.holiday import USFederalHolidayCalendar
+from pandas.tseries.offsets import CustomBusinessDay
 
 from equity_trading.src.live.circuit_breaker import check_circuit
 from equity_trading.src.live.position_manager import check_capacity
@@ -28,17 +33,44 @@ STOP_PCT = 0.05      # ±5% emergency only — backtest holds ~24h with no tacti
 TARGET_PCT = 0.05
 
 
-def _is_pre_fomc_day(today: dt.date, fomc_dates: Sequence[dt.date]) -> bool:
-    """True if today is the calendar day before any FOMC announcement.
+@lru_cache(maxsize=1)
+def _us_business_day() -> CustomBusinessDay:
+    """One US business-day offset that excludes federal holidays.
 
-    Note: This uses calendar days, not trading days. Backtests in our cache
-    correctly exclude weekends, but if a Monday FOMC follows a Friday pre-FOMC
-    day this still works (Friday + 1 day = Saturday, but if FOMC list contains
-    Monday's date and today is Friday, this returns False — caller must seed
-    the appropriate pre-FOMC date list directly if needed).
+    Cached because constructing it touches the holiday calendar each time.
     """
-    next_day = today + timedelta(days=1)
-    return next_day in set(fomc_dates)
+    return CustomBusinessDay(calendar=USFederalHolidayCalendar())
+
+
+def _previous_us_trading_day(d: dt.date) -> dt.date:
+    """Return the most recent US trading day strictly before `d` (skips weekends + federal holidays)."""
+    bday = _us_business_day()
+    prev = (pd.Timestamp(d) - bday).date()
+    return prev
+
+
+def _compute_pre_fomc_set(fomc_dates: Sequence[dt.date]) -> set[dt.date]:
+    """Compute the set of trading days that are the trading-day-immediately-before each FOMC.
+
+    Skips FOMC dates that fall on weekends (emergency announcements aren't
+    tradable in advance with this strategy).
+    """
+    out: set[dt.date] = set()
+    for f in fomc_dates:
+        if f.weekday() in (5, 6):
+            continue
+        out.add(_previous_us_trading_day(f))
+    return out
+
+
+def _is_pre_fomc_day(today: dt.date, fomc_dates: Sequence[dt.date]) -> bool:
+    """True if today is the trading day immediately before any FOMC announcement.
+
+    Uses pandas USFederalHolidayCalendar — handles weekends and federal holidays
+    correctly (e.g. an FOMC on the Tuesday after MLK Monday yields pre-FOMC on
+    the preceding Friday).
+    """
+    return today in _compute_pre_fomc_set(fomc_dates)
 
 
 def run_pre_fomc(
