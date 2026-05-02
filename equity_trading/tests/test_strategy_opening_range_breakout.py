@@ -86,18 +86,30 @@ def test_orb_resets_per_day():
     assert signal.sum() == 2  # exactly one signal per day
 
 
-def test_orb_compute_exit_levels_uses_or_high_low():
-    """Stop = OR_low, Target = OR_high + (OR_high - OR_low)."""
+def test_orb_compute_exit_levels_default_multipliers():
+    """Defaults validated in 7-yr backtest: stop=OR_low+0.25R, target=OR_high+2R."""
     s = OpeningRangeBreakoutStrategy()
     bars = _make_one_day_bars(or_high=100.5, or_low=100.0, breakout_at_bar=10)
-    # Entry at bar 10 (first breakout). Use the breakout close = 100.80 as entry_price.
     entry_price = float(bars["close"].iloc[10])
     stop, target = s.compute_exit_levels(
         bars_5min=bars, entry_idx=10, entry_price=entry_price, atr_pct=0.10,
         params={"or_window_bars": 6},
     )
-    # OR_low = 100.0, OR_high = 100.5
-    # Stop = 100.0
-    # Target = 100.5 + (100.5 - 100.0) = 101.0
+    # OR_low = 100.0, OR_high = 100.5, range = 0.5
+    # Stop   = 100.0 + 0.25 * 0.5 = 100.125
+    # Target = 100.5 + 2.0  * 0.5 = 101.5
+    assert stop == pytest.approx(100.125, abs=1e-6)
+    assert target == pytest.approx(101.5, abs=1e-6)
+
+
+def test_orb_compute_exit_levels_overridable_via_params():
+    """stop_mult/target_mult params override defaults (V0 legacy: 0.0/1.0)."""
+    s = OpeningRangeBreakoutStrategy()
+    bars = _make_one_day_bars(or_high=100.5, or_low=100.0, breakout_at_bar=10)
+    entry_price = float(bars["close"].iloc[10])
+    stop, target = s.compute_exit_levels(
+        bars_5min=bars, entry_idx=10, entry_price=entry_price, atr_pct=0.10,
+        params={"or_window_bars": 6, "stop_mult": 0.0, "target_mult": 1.0},
+    )
     assert stop == pytest.approx(100.0, abs=1e-6)
     assert target == pytest.approx(101.0, abs=1e-6)
