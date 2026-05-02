@@ -66,7 +66,7 @@ def simulate_strategy(
             elif current >= target_price:
                 trades.append(target_pct - cost_pct / 100.0)
                 in_position = False
-            elif i - entry_idx > max_hold_bars:
+            elif i - entry_idx >= max_hold_bars:
                 pnl_pct = (current - entry_price) / entry_price - cost_pct / 100.0
                 trades.append(pnl_pct)
                 in_position = False

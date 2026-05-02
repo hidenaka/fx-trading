@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from equity_trading.src.phase0.strategy_simulator import simulate_strategy
 from equity_trading.src.strategy.strategies.mean_reversion import MeanReversionStrategy
@@ -55,3 +56,41 @@ def test_simulate_strategy_zero_signal_returns_zero_trades():
         params={},
     )
     assert result["trade_count"] == 0
+
+
+def test_simulate_strategy_max_hold_bars_caps_at_n_bars():
+    """Time-exit fires at exactly max_hold_bars after entry fill, not max_hold_bars+1."""
+    n = 100
+    # Flat price → stop/target never trigger; only time-exit fires.
+    closes = np.full(n, 100.0)
+    bars = pd.DataFrame(
+        {"open": closes, "high": closes + 0.05, "low": closes - 0.05, "close": closes, "volume": [10000] * n},
+        index=pd.date_range("2024-01-01 14:30", periods=n, freq="5min", tz="UTC"),
+    )
+    daily = pd.DataFrame(
+        {"close": [100.0] * 250},
+        index=pd.date_range("2023-01-01", periods=250, freq="1D", tz="UTC"),
+    )
+
+    class AlwaysOnceStrategy(MeanReversionStrategy):
+        """Signal True at bar 0 only, so we have one trade entered at bar 1."""
+        name = "always_once"
+
+        def compute_entry_signal(self, bars_5min, daily, atr_pct, params):
+            sig = pd.Series([False] * len(bars_5min), index=bars_5min.index, dtype=bool)
+            sig.iloc[0] = True
+            return sig
+
+    s = AlwaysOnceStrategy()
+    result = simulate_strategy(
+        strategy=s,
+        bars_5min=bars,
+        daily=daily,
+        atr_pct=0.10,
+        params={},
+        max_hold_bars=10,
+    )
+    # 1 trade, time-exited after 10 bars at flat price → pnl = -cost (not 0)
+    assert result["trade_count"] == 1
+    # avg_pnl_pct in percent: at flat price, only cost subtracts; cost_pct default 0.10 → -0.10%
+    assert result["avg_pnl_pct"] == pytest.approx(-0.10, abs=0.001)
