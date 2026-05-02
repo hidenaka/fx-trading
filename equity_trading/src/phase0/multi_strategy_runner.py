@@ -41,7 +41,10 @@ def run_all_strategies(
             atr_pct = atr_map[symbol]
             for params in param_list:
                 serialized = json.dumps(params, sort_keys=True)
-                augmented = {**params, "_spy_5min": spy_5min} if spy_5min is not None else dict(params)
+                augmented = {**params}
+                if spy_5min is not None:
+                    augmented["_spy_5min"] = spy_5min
+                augmented["_daily"] = daily
                 summary = simulate_strategy(
                     strategy=strategy,
                     bars_5min=bars_5,

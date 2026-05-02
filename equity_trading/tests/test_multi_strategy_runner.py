@@ -91,3 +91,35 @@ def test_run_all_strategies_injects_spy_5min_when_available():
     for params_str in df["params"]:
         assert "_spy_5min" not in params_str
         assert '"foo": 1' in params_str
+
+
+def test_run_all_strategies_injects_daily_when_available():
+    """When data_map has (symbol, 1440), runner injects '_daily' into params for each strategy call."""
+    captured: list[dict] = []
+
+    class CaptureStrategy(MeanReversionStrategy):
+        name = "capture_daily"
+
+        def compute_entry_signal(self, bars_5min, daily, atr_pct, params):
+            captured.append(params)
+            return pd.Series([False] * len(bars_5min), index=bars_5min.index, dtype=bool)
+
+    bars = _make_bars()
+    daily = _make_daily()
+    data_map = {
+        ("SPY", 5): bars, ("SPY", 1440): daily,
+        ("XLK", 5): bars, ("XLK", 1440): daily,
+    }
+    atr_map = {"SPY": 0.10, "XLK": 0.13}
+
+    results = run_all_strategies(
+        strategies=[CaptureStrategy()],
+        symbols=["XLK"],
+        data_map=data_map,
+        atr_map=atr_map,
+        param_grid={"capture_daily": [{}]},
+    )
+    assert len(captured) == 1
+    assert "_daily" in captured[0]
+    # Reported params (DataFrame) should NOT include _daily
+    assert "_daily" not in results["capture_daily"]["params"].iloc[0]

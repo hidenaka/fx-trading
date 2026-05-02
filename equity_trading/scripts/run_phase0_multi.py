@@ -26,10 +26,13 @@ from equity_trading.src.phase0.data_collector import collect_phase0_data
 from equity_trading.src.phase0.multi_strategy_runner import run_all_strategies
 from equity_trading.src.strategy.strategies.analysis_driven_reversion import AnalysisDrivenReversionStrategy
 from equity_trading.src.strategy.strategies.env_dependent import EnvDependentReversionStrategy
+from equity_trading.src.strategy.strategies.gap_fill import GapFillStrategy
 from equity_trading.src.strategy.strategies.mean_reversion import MeanReversionStrategy
 from equity_trading.src.strategy.strategies.momentum_breakout import MomentumBreakoutStrategy
 from equity_trading.src.strategy.strategies.multi_timeframe import MultiTimeframeStrategy
+from equity_trading.src.strategy.strategies.opening_range_breakout import OpeningRangeBreakoutStrategy
 from equity_trading.src.strategy.strategies.trend_follow import TrendFollowStrategy
+from equity_trading.src.strategy.strategies.vwap_scalp import VWAPScalpStrategy
 
 
 DEFAULT_SYMBOLS = ["SPY", "QQQ", "IWM", "DIA", "XLK"]
@@ -61,6 +64,20 @@ PARAM_GRID = {
         {"threshold": 0.30, "block_lunch_hours": [11, 12], "require_spy_up": True},
         {"threshold": 0.25, "block_lunch_hours": [11, 12], "require_spy_up": True},
         {"threshold": 0.20, "block_lunch_hours": [11, 12], "require_spy_up": True},
+    ],
+    "vwap_scalp": [
+        {"k_entry": 1.0},
+        {"k_entry": 1.5},
+        {"k_entry": 2.0},
+    ],
+    "opening_range_breakout": [
+        {"or_window_bars": 6},   # 30 min
+        {"or_window_bars": 12},  # 60 min
+    ],
+    "gap_fill": [
+        {"gap_threshold": 0.003, "stop_extension": 0.005},  # 0.3% gap, 0.5% stop
+        {"gap_threshold": 0.005, "stop_extension": 0.005},  # 0.5% gap, 0.5% stop
+        {"gap_threshold": 0.010, "stop_extension": 0.010},  # 1.0% gap, 1.0% stop
     ],
 }
 
@@ -120,6 +137,9 @@ def main(
         EnvDependentReversionStrategy(),
         MultiTimeframeStrategy(),
         AnalysisDrivenReversionStrategy(),
+        VWAPScalpStrategy(),
+        OpeningRangeBreakoutStrategy(),
+        GapFillStrategy(),
     ]
     results = run_all_strategies(
         strategies=strategies,
