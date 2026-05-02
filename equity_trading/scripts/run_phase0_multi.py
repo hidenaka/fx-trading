@@ -24,6 +24,7 @@ from equity_trading.src.phase0.atr_analyzer import analyze_atr_distribution
 from equity_trading.src.phase0.comparison_report import generate_comparison_report
 from equity_trading.src.phase0.data_collector import collect_phase0_data
 from equity_trading.src.phase0.multi_strategy_runner import run_all_strategies
+from equity_trading.src.strategy.strategies.analysis_driven_reversion import AnalysisDrivenReversionStrategy
 from equity_trading.src.strategy.strategies.env_dependent import EnvDependentReversionStrategy
 from equity_trading.src.strategy.strategies.mean_reversion import MeanReversionStrategy
 from equity_trading.src.strategy.strategies.momentum_breakout import MomentumBreakoutStrategy
@@ -55,6 +56,11 @@ PARAM_GRID = {
     "multi_timeframe": [
         {"rsi_5min_threshold": 30.0, "rsi_15min_threshold": 35.0, "rsi_60min_threshold": 40.0},
         {"rsi_5min_threshold": 25.0, "rsi_15min_threshold": 30.0, "rsi_60min_threshold": 35.0},
+    ],
+    "analysis_driven_reversion": [
+        {"threshold": 0.30, "block_lunch_hours": [11, 12], "require_spy_up": True},
+        {"threshold": 0.25, "block_lunch_hours": [11, 12], "require_spy_up": True},
+        {"threshold": 0.20, "block_lunch_hours": [11, 12], "require_spy_up": True},
     ],
 }
 
@@ -113,6 +119,7 @@ def main(
         MomentumBreakoutStrategy(),
         EnvDependentReversionStrategy(),
         MultiTimeframeStrategy(),
+        AnalysisDrivenReversionStrategy(),
     ]
     results = run_all_strategies(
         strategies=strategies,

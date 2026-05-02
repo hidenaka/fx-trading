@@ -6,6 +6,7 @@ from equity_trading.src.phase0.multi_strategy_runner import (
 )
 from equity_trading.src.strategy.strategies.mean_reversion import MeanReversionStrategy
 from equity_trading.src.strategy.strategies.trend_follow import TrendFollowStrategy
+import json
 
 
 def _make_bars(n: int = 300) -> pd.DataFrame:
@@ -52,3 +53,41 @@ def test_run_all_strategies_returns_dataframe_per_strategy():
     assert len(results["trend_follow"]) == 2
     cols = {"strategy", "symbol", "params", "trade_count", "win_count", "win_rate", "avg_pnl_pct"}
     assert cols.issubset(results["mean_reversion"].columns)
+
+
+def test_run_all_strategies_injects_spy_5min_when_available():
+    """SPY 5min が data_map にある場合、params に '_spy_5min' が注入されているか."""
+    captured_params: list[dict] = []
+
+    class CaptureStrategy(MeanReversionStrategy):
+        name = "capture"
+
+        def compute_entry_signal(self, bars_5min, daily, atr_pct, params):
+            captured_params.append(params)
+            return pd.Series([False] * len(bars_5min), index=bars_5min.index, dtype=bool)
+
+    bars = _make_bars()
+    daily = _make_daily()
+    data_map = {
+        ("SPY", 5): bars,
+        ("SPY", 1440): daily,
+        ("XLK", 5): bars,
+        ("XLK", 1440): daily,
+    }
+    atr_map = {"SPY": 0.10, "XLK": 0.13}
+
+    results = run_all_strategies(
+        strategies=[CaptureStrategy()],
+        symbols=["SPY", "XLK"],
+        data_map=data_map,
+        atr_map=atr_map,
+        param_grid={"capture": [{"foo": 1}]},
+    )
+    # Both calls (SPY and XLK) should see _spy_5min injected
+    assert all("_spy_5min" in p for p in captured_params)
+    assert len(captured_params) == 2
+    # The reported params (in DataFrame) must NOT include _spy_5min in the JSON
+    df = results["capture"]
+    for params_str in df["params"]:
+        assert "_spy_5min" not in params_str
+        assert '"foo": 1' in params_str

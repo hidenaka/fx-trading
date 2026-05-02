@@ -31,6 +31,7 @@ def run_all_strategies(
         各 DataFrame の列：strategy, symbol, params, trade_count, win_count, win_rate, avg_pnl_pct
     """
     results: dict[str, list[dict]] = {s.name: [] for s in strategies}
+    spy_5min = data_map.get(("SPY", 5))
 
     for strategy in strategies:
         param_list = param_grid.get(strategy.name, [{}])
@@ -39,16 +40,18 @@ def run_all_strategies(
             daily = data_map[(symbol, 1440)]
             atr_pct = atr_map[symbol]
             for params in param_list:
+                serialized = json.dumps(params, sort_keys=True)
+                augmented = {**params, "_spy_5min": spy_5min} if spy_5min is not None else dict(params)
                 summary = simulate_strategy(
                     strategy=strategy,
                     bars_5min=bars_5,
                     daily=daily,
                     atr_pct=atr_pct,
-                    params=params,
+                    params=augmented,
                 )
                 summary["strategy"] = strategy.name
                 summary["symbol"] = symbol
-                summary["params"] = json.dumps(params, sort_keys=True)
+                summary["params"] = serialized
                 results[strategy.name].append(summary)
 
     return {
