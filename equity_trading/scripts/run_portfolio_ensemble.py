@@ -25,37 +25,42 @@ from equity_trading.src.broker.alpaca_client import AlpacaClient
 from equity_trading.src.config import load_config
 from equity_trading.src.data.price_fetcher import PriceFetcher
 from equity_trading.src.strategy.strategies.gap_fill import GapFillStrategy
+from equity_trading.src.strategy.strategies.last_hour_momentum import LastHourMomentumStrategy
 from equity_trading.src.strategy.strategies.opening_range_breakout import OpeningRangeBreakoutStrategy
+from equity_trading.src.strategy.strategies.overnight_hold import OvernightHoldStrategy
 from equity_trading.src.strategy.strategies.pre_fomc import PreFOMCDriftStrategy
 
 
 # RTH-validated strategies (2019-05–2026-05, 78 bars/day, post-fix low/high stop modeling).
-# Earlier "ext-hours" results were inflated by pre-market fills; using RTH-only
-# data exposes which strategies have a real edge in tradable regular-hours bars.
+# Per-strategy cost_pct accounts for execution method:
+#   - 0.10% (10 bps) for intraday market orders (gap_fill, ORB)
+#   - 0.03% (3 bps)  for MOC + MOO auction fills (overnight_hold) — no spread on auctions
+#   - 0.10% for pre-FOMC (intraday market orders both legs)
 #
-# Survivors (7-yr EV > 0, n >= 30):
-#   - PreFOMCDrift on all 5 ETFs (morning entry, hold ~24h to FOMC announcement)
-#   - OpeningRangeBreakout 60-min OR window on QQQ
+# Format: (StrategyClass, symbol, params, label, cost_pct)
 SELECTED = [
-    # Pre-FOMC: morning entry (bar 0 = 9:30 ET signal, fill 9:35; exit ~14:00 ET FOMC day)
-    (PreFOMCDriftStrategy,    "XLK", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_XLK"),
-    (PreFOMCDriftStrategy,    "QQQ", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_QQQ"),
-    (PreFOMCDriftStrategy,    "IWM", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_IWM"),
-    (PreFOMCDriftStrategy,    "SPY", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_SPY"),
-    (PreFOMCDriftStrategy,    "DIA", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_DIA"),
-    # ORB 60-min on QQQ (only RTH gap_fill / OR variant with positive EV at n>30)
-    (OpeningRangeBreakoutStrategy, "QQQ", {"or_window_bars": 12}, "orb_60min_QQQ"),
+    (PreFOMCDriftStrategy,    "XLK", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_XLK", 0.10),
+    (PreFOMCDriftStrategy,    "QQQ", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_QQQ", 0.10),
+    (PreFOMCDriftStrategy,    "IWM", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_IWM", 0.10),
+    (PreFOMCDriftStrategy,    "SPY", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_SPY", 0.10),
+    (PreFOMCDriftStrategy,    "DIA", {"entry_bar_pos": 0, "_max_hold_bars": 130}, "pre_fomc_DIA", 0.10),
+    (OpeningRangeBreakoutStrategy, "QQQ", {"or_window_bars": 12}, "orb_60min_QQQ", 0.10),
+    # Last-hour momentum: prior day's last-30min positive → enter today at 9:35 ET, hold ~5 hr
+    (LastHourMomentumStrategy, "SPY", {"threshold": 0.003, "_max_hold_bars": 60}, "lhm_SPY", 0.10),
+    (LastHourMomentumStrategy, "QQQ", {"threshold": 0.003, "_max_hold_bars": 60}, "lhm_QQQ", 0.10),
 ]
 
 
 def collect_all_trades(symbols: list[str], data_map, atr_map) -> pd.DataFrame:
-    """Run each selected strategy and collect trades into a single DataFrame.
-
-    Adds columns: strategy_label, symbol.
-    """
+    """Run each selected strategy with its per-strategy cost_pct and collect trades."""
     all_trades: list[pd.DataFrame] = []
     spy_5min = data_map.get(("SPY", 5))
-    for strat_cls, sym, params, label in SELECTED:
+    for entry in SELECTED:
+        if len(entry) == 5:
+            strat_cls, sym, params, label, cost_pct = entry
+        else:
+            strat_cls, sym, params, label = entry
+            cost_pct = 0.10
         bars = data_map[(sym, 5)]
         daily = data_map[(sym, 1440)]
         atr = atr_map[sym]
@@ -65,7 +70,7 @@ def collect_all_trades(symbols: list[str], data_map, atr_map) -> pd.DataFrame:
         _, trades = simulate_strategy(
             strategy=strat_cls(),
             bars_5min=bars, daily=daily, atr_pct=atr,
-            params=augmented, return_trades=True,
+            params=augmented, cost_pct=cost_pct, return_trades=True,
         )
         if len(trades) == 0:
             continue
@@ -233,8 +238,10 @@ def main() -> int:
     md.append("Combines top post-fix strategies into one $100k account simulation.")
     md.append("")
     md.append("**Selected strategies:**")
-    for cls, sym, params, label in SELECTED:
-        md.append(f"- {label}: {cls.__name__}({sym}, {params})")
+    for entry in SELECTED:
+        cls, sym, params, label = entry[0], entry[1], entry[2], entry[3]
+        cost = entry[4] if len(entry) >= 5 else 0.10
+        md.append(f"- {label}: {cls.__name__}({sym}, {params}, cost={cost}%)")
     md.append("")
 
     if len(trades) == 0:

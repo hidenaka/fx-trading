@@ -32,6 +32,7 @@ from equity_trading.src.strategy.strategies.mean_reversion import MeanReversionS
 from equity_trading.src.strategy.strategies.momentum_breakout import MomentumBreakoutStrategy
 from equity_trading.src.strategy.strategies.multi_timeframe import MultiTimeframeStrategy
 from equity_trading.src.strategy.strategies.opening_range_breakout import OpeningRangeBreakoutStrategy
+from equity_trading.src.strategy.strategies.overnight_hold import OvernightHoldStrategy
 from equity_trading.src.strategy.strategies.pre_fomc import PreFOMCDriftStrategy
 from equity_trading.src.strategy.strategies.trend_follow import TrendFollowStrategy
 from equity_trading.src.strategy.strategies.turn_of_month import TurnOfMonthStrategy
@@ -103,6 +104,10 @@ PARAM_GRID = {
         {"entry_bar_pos": 0, "_max_hold_bars": 70},
         {"entry_bar_pos": 12, "_max_hold_bars": 60},
     ],
+    "overnight_hold": [
+        # Buy at bar 77 close (16:00 ET), sell at next-day bar 0 close (~9:35 ET).
+        {"entry_signal_bar": 76, "_max_hold_bars": 1},
+    ],
 }
 
 
@@ -167,6 +172,7 @@ def main(
         IntradayMomentumStrategy(),
         PreFOMCDriftStrategy(),
         TurnOfMonthStrategy(),
+        OvernightHoldStrategy(),
     ]
     results = run_all_strategies(
         strategies=strategies,
