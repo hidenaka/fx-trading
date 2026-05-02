@@ -212,11 +212,18 @@ def test_simulate_strategy_calls_compute_exit_levels():
 def test_simulate_strategy_custom_exit_changes_outcome():
     """Tight custom stop fires while default ATR stop wouldn't."""
     n = 60
-    # Drop by 0.5% on bar 5
+    # Bar 5: low dips to 99.45 (intra-bar) but close recovers to 99.80 (above stop=99.70).
+    # With realistic low/high-based exit, custom stop should trigger via the bar low.
     closes = np.full(n, 100.0)
-    closes[5:] = 99.50  # -0.5%
+    closes[5:] = 99.80
+    opens = np.full(n, 100.0)
+    opens[5:] = 99.95  # No gap-through stop; intra-bar low triggers it.
+    highs = closes + 0.05
+    lows = np.full(n, 99.95)
+    lows[5] = 99.45  # only this bar dips below stop
+    lows[6:] = 99.75
     bars = pd.DataFrame(
-        {"open": closes, "high": closes + 0.05, "low": closes - 0.05, "close": closes, "volume": [10000] * n},
+        {"open": opens, "high": highs, "low": lows, "close": closes, "volume": [10000] * n},
         index=pd.date_range("2024-01-01 14:30", periods=n, freq="5min", tz="UTC"),
     )
     daily = pd.DataFrame(
@@ -240,14 +247,198 @@ def test_simulate_strategy_custom_exit_changes_outcome():
         strategy=TightStopStrategy(),
         bars_5min=bars,
         daily=daily,
-        atr_pct=0.10,  # default stop = 0.10*1.5/100 = 0.15% (would also stop at -0.5%)
+        atr_pct=0.10,
         params={},
         max_hold_bars=50,
         return_trades=True,
     )
     assert summary["trade_count"] == 1
-    # Both default and custom stop would fire at -0.5%; but verify the exit price uses CUSTOM stop, not default
-    # Custom stop = 100 * 0.997 = 99.70. Pnl = (99.70 - 100)/100 - cost = -0.003 - 0.001 = -0.004 = -0.4%
+    # Custom stop = 100 * 0.997 = 99.70. Bar 5 low (99.45) <= stop, open (99.95) > stop → fill at stop_price.
+    # Pnl = (99.70 - 100)/100 - cost = -0.003 - 0.001 = -0.004 = -0.4%
     assert trades.iloc[0]["exit_type"] == "stop"
-    # avg_pnl_pct = -0.4% (not -0.25% which is default ATR stop at 0.10*1.5/100 = 0.0015 = 0.15%)
     assert summary["avg_pnl_pct"] == pytest.approx(-0.4, abs=0.01)
+
+
+# === New tests for realistic low/high/gap-based exit modeling ===
+
+
+def _bars_from_arrays(opens, highs, lows, closes):
+    n = len(closes)
+    return pd.DataFrame(
+        {"open": opens, "high": highs, "low": lows, "close": closes, "volume": [10000] * n},
+        index=pd.date_range("2024-01-01 14:30", periods=n, freq="5min", tz="UTC"),
+    )
+
+
+def _flat_daily(n_days: int = 250) -> pd.DataFrame:
+    return pd.DataFrame(
+        {"close": [100.0] * n_days},
+        index=pd.date_range("2023-01-01", periods=n_days, freq="1D", tz="UTC"),
+    )
+
+
+class _SignalAtZero(MeanReversionStrategy):
+    """Fires entry signal at bar 0 only (entry fills at bar 1 close)."""
+
+    name = "signal_at_zero"
+
+    def compute_entry_signal(self, bars_5min, daily, atr_pct, params):
+        sig = pd.Series([False] * len(bars_5min), index=bars_5min.index, dtype=bool)
+        sig.iloc[0] = True
+        return sig
+
+    def compute_exit_levels(self, bars_5min, entry_idx, entry_price, atr_pct, params):
+        # stop=99.70, target=101.0 (entry=100)
+        return entry_price * 0.997, entry_price * 1.01
+
+
+def test_stop_triggered_by_bar_low_even_when_close_recovers():
+    """Bar low dips below stop, close recovers above. Should still trigger stop."""
+    n = 30
+    opens = np.full(n, 100.0)
+    closes = np.full(n, 100.0)
+    highs = np.full(n, 100.05)
+    lows = np.full(n, 99.95)
+    # Bar 5: low=99.50 (below stop=99.70), close=99.85 (above stop), open=99.90 (above stop)
+    opens[5] = 99.90
+    lows[5] = 99.50
+    closes[5] = 99.85
+    highs[5] = 99.95
+
+    bars = _bars_from_arrays(opens, highs, lows, closes)
+    summary, trades = simulate_strategy(
+        strategy=_SignalAtZero(), bars_5min=bars, daily=_flat_daily(),
+        atr_pct=0.10, params={}, max_hold_bars=20, return_trades=True,
+    )
+    assert summary["trade_count"] == 1
+    assert trades.iloc[0]["exit_type"] == "stop"
+    # Fill at stop_price=99.70 (low penetrated, but no gap through)
+    assert trades.iloc[0]["exit_price"] == pytest.approx(99.70, abs=0.01)
+    # pnl = -0.3% - 0.1% cost = -0.4%
+    assert summary["avg_pnl_pct"] == pytest.approx(-0.4, abs=0.01)
+
+
+def test_target_triggered_by_bar_high_even_when_close_pulls_back():
+    """Bar high spikes above target, close pulls back below. Should still trigger target."""
+    n = 30
+    opens = np.full(n, 100.0)
+    closes = np.full(n, 100.0)
+    highs = np.full(n, 100.05)
+    lows = np.full(n, 99.95)
+    # Bar 5: high=101.20 (above target=101.0), close=100.50, open=100.10
+    opens[5] = 100.10
+    highs[5] = 101.20
+    closes[5] = 100.50
+    lows[5] = 100.05
+
+    bars = _bars_from_arrays(opens, highs, lows, closes)
+    summary, trades = simulate_strategy(
+        strategy=_SignalAtZero(), bars_5min=bars, daily=_flat_daily(),
+        atr_pct=0.10, params={}, max_hold_bars=20, return_trades=True,
+    )
+    assert summary["trade_count"] == 1
+    assert trades.iloc[0]["exit_type"] == "target"
+    # Fill at target_price=101.0
+    assert trades.iloc[0]["exit_price"] == pytest.approx(101.0, abs=0.01)
+    # pnl = +1.0% - 0.1% cost = +0.9%
+    assert summary["avg_pnl_pct"] == pytest.approx(0.9, abs=0.01)
+
+
+def test_gap_down_through_stop_fills_at_open_worse_than_stop():
+    """Open gaps below stop. Fill at open (worse than stop_price)."""
+    n = 30
+    opens = np.full(n, 100.0)
+    closes = np.full(n, 100.0)
+    highs = np.full(n, 100.05)
+    lows = np.full(n, 99.95)
+    # Bar 5: gap-down to open=99.40 (below stop=99.70)
+    opens[5] = 99.40
+    closes[5] = 99.45
+    highs[5] = 99.50
+    lows[5] = 99.30
+
+    bars = _bars_from_arrays(opens, highs, lows, closes)
+    summary, trades = simulate_strategy(
+        strategy=_SignalAtZero(), bars_5min=bars, daily=_flat_daily(),
+        atr_pct=0.10, params={}, max_hold_bars=20, return_trades=True,
+    )
+    assert summary["trade_count"] == 1
+    assert trades.iloc[0]["exit_type"] == "stop"
+    # Fill at open=99.40 (worse than stop_price=99.70)
+    assert trades.iloc[0]["exit_price"] == pytest.approx(99.40, abs=0.01)
+    # pnl = (99.40-100)/100 - 0.1% = -0.6% - 0.1% = -0.7%
+    assert summary["avg_pnl_pct"] == pytest.approx(-0.7, abs=0.01)
+
+
+def test_gap_up_through_target_fills_at_open_better_than_target():
+    """Open gaps above target. Fill at open (better than target_price)."""
+    n = 30
+    opens = np.full(n, 100.0)
+    closes = np.full(n, 100.0)
+    highs = np.full(n, 100.05)
+    lows = np.full(n, 99.95)
+    # Bar 5: gap-up to open=101.50 (above target=101.0)
+    opens[5] = 101.50
+    closes[5] = 101.40
+    highs[5] = 101.60
+    lows[5] = 101.30
+
+    bars = _bars_from_arrays(opens, highs, lows, closes)
+    summary, trades = simulate_strategy(
+        strategy=_SignalAtZero(), bars_5min=bars, daily=_flat_daily(),
+        atr_pct=0.10, params={}, max_hold_bars=20, return_trades=True,
+    )
+    assert summary["trade_count"] == 1
+    assert trades.iloc[0]["exit_type"] == "target"
+    # Fill at open=101.50 (better than target_price=101.0)
+    assert trades.iloc[0]["exit_price"] == pytest.approx(101.50, abs=0.01)
+    # pnl = +1.5% - 0.1% = +1.4%
+    assert summary["avg_pnl_pct"] == pytest.approx(1.4, abs=0.01)
+
+
+def test_simultaneous_low_below_stop_and_high_above_target_stop_wins():
+    """If both stop and target are touched in same bar, stop wins (conservative)."""
+    n = 30
+    opens = np.full(n, 100.0)
+    closes = np.full(n, 100.0)
+    highs = np.full(n, 100.05)
+    lows = np.full(n, 99.95)
+    # Bar 5: low=99.50 (below stop), high=101.50 (above target), open=100.0 (between)
+    opens[5] = 100.0
+    closes[5] = 100.0
+    lows[5] = 99.50
+    highs[5] = 101.50
+
+    bars = _bars_from_arrays(opens, highs, lows, closes)
+    summary, trades = simulate_strategy(
+        strategy=_SignalAtZero(), bars_5min=bars, daily=_flat_daily(),
+        atr_pct=0.10, params={}, max_hold_bars=20, return_trades=True,
+    )
+    assert summary["trade_count"] == 1
+    # Conservative: stop wins
+    assert trades.iloc[0]["exit_type"] == "stop"
+    assert trades.iloc[0]["exit_price"] == pytest.approx(99.70, abs=0.01)
+
+
+def test_entry_bar_low_high_does_not_trigger_exit():
+    """Entry bar's low/high happened BEFORE entry fill; must not trigger exit."""
+    n = 30
+    opens = np.full(n, 100.0)
+    closes = np.full(n, 100.0)
+    highs = np.full(n, 100.05)
+    lows = np.full(n, 99.95)
+    # Bar 1 (entry bar): low=99.40 (below stop=99.70), high=101.50 (above target=101.0)
+    # These should NOT trigger exit because entry fills at close=100.
+    lows[1] = 99.40
+    highs[1] = 101.50
+    closes[1] = 100.0  # entry price
+    opens[1] = 100.0
+
+    bars = _bars_from_arrays(opens, highs, lows, closes)
+    summary, trades = simulate_strategy(
+        strategy=_SignalAtZero(), bars_5min=bars, daily=_flat_daily(),
+        atr_pct=0.10, params={}, max_hold_bars=20, return_trades=True,
+    )
+    # No exit triggered on entry bar; flat afterwards → time exit at bar 21
+    assert summary["trade_count"] == 1
+    assert trades.iloc[0]["exit_type"] == "time"

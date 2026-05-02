@@ -1,10 +1,47 @@
-"""任意の戦略を受け取り、同じ stop/target ロジックでバックテストする."""
+"""任意の戦略を受け取り、同じ stop/target ロジックでバックテストする.
+
+Exit modeling:
+- Long-only.
+- Stop hits if bar open <= stop (gap-through, fill at open) or bar low <= stop
+  (intra-bar, fill at stop_price). Stop is checked before target (conservative).
+- Target hits if bar open >= target (gap-through, fill at open) or bar high >= target
+  (intra-bar, fill at target_price).
+- Time exit fires at close of bar where (i - entry_idx) == max_hold_bars.
+- Entry bar (i == entry_idx) is skipped for exit checks because its low/high
+  occurred BEFORE entry fill at close.
+"""
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
 from equity_trading.src.strategy.base import TradingStrategy
+
+
+def _check_exit_at_bar(
+    open_p: float,
+    high_p: float,
+    low_p: float,
+    close_p: float,
+    stop_price: float,
+    target_price: float,
+) -> tuple[str, float] | None:
+    """Return (exit_type, fill_price) if exit triggers in this bar, else None.
+
+    Conservative: stop wins over target when both sides of bar would trigger.
+    Gap-through (open beyond level) fills at open; intra-bar fills at the level.
+    """
+    # Stop checks first (conservative)
+    if open_p <= stop_price:
+        return "stop", open_p
+    if low_p <= stop_price:
+        return "stop", stop_price
+    # Then target
+    if open_p >= target_price:
+        return "target", open_p
+    if high_p >= target_price:
+        return "target", target_price
+    return None
 
 
 def simulate_strategy(
@@ -42,7 +79,10 @@ def simulate_strategy(
 
     entry_signal = strategy.compute_entry_signal(bars_5min, daily, atr_pct, params)
 
-    closes = bars_5min["close"].values
+    opens = bars_5min["open"].to_numpy()
+    highs = bars_5min["high"].to_numpy()
+    lows = bars_5min["low"].to_numpy()
+    closes = bars_5min["close"].to_numpy()
     n = len(closes)
     trade_records: list[dict] = []
     in_position = False
@@ -57,44 +97,37 @@ def simulate_strategy(
             entry_idx = i + 1
             if entry_idx >= n:
                 break
-            entry_price = closes[entry_idx]
+            entry_price = float(closes[entry_idx])
             merged_params = {**params, "stop_multiplier": stop_multiplier, "target_multiplier": target_multiplier}
             stop_price, target_price = strategy.compute_exit_levels(
                 bars_5min, entry_idx, entry_price, atr_pct, merged_params,
             )
-        elif in_position:
-            current = closes[i]
-            if current <= stop_price:
-                pnl_fraction = (stop_price - entry_price) / entry_price - cost_pct / 100.0
+        elif in_position and i > entry_idx:
+            exit_outcome = _check_exit_at_bar(
+                float(opens[i]), float(highs[i]), float(lows[i]), float(closes[i]),
+                stop_price, target_price,
+            )
+            if exit_outcome is not None:
+                exit_type, fill_price = exit_outcome
+                pnl_fraction = (fill_price - entry_price) / entry_price - cost_pct / 100.0
                 trade_records.append({
                     "entry_ts": bars_5min.index[entry_idx],
                     "exit_ts": bars_5min.index[i],
                     "entry_price": entry_price,
-                    "exit_price": current,
-                    "exit_type": "stop",
-                    "bars_held": i - entry_idx,
-                    "pnl_pct": pnl_fraction,
-                })
-                in_position = False
-            elif current >= target_price:
-                pnl_fraction = (target_price - entry_price) / entry_price - cost_pct / 100.0
-                trade_records.append({
-                    "entry_ts": bars_5min.index[entry_idx],
-                    "exit_ts": bars_5min.index[i],
-                    "entry_price": entry_price,
-                    "exit_price": current,
-                    "exit_type": "target",
+                    "exit_price": float(fill_price),
+                    "exit_type": exit_type,
                     "bars_held": i - entry_idx,
                     "pnl_pct": pnl_fraction,
                 })
                 in_position = False
             elif i - entry_idx >= max_hold_bars:
-                pnl_fraction = (current - entry_price) / entry_price - cost_pct / 100.0
+                close_p = float(closes[i])
+                pnl_fraction = (close_p - entry_price) / entry_price - cost_pct / 100.0
                 trade_records.append({
                     "entry_ts": bars_5min.index[entry_idx],
                     "exit_ts": bars_5min.index[i],
                     "entry_price": entry_price,
-                    "exit_price": current,
+                    "exit_price": close_p,
                     "exit_type": "time",
                     "bars_held": i - entry_idx,
                     "pnl_pct": pnl_fraction,
@@ -141,6 +174,8 @@ def simulate_single_trade(
 ) -> dict | None:
     """Simulate one trade. Returns trade dict or None if not fillable.
 
+    Uses the same realistic low/high/gap exit modeling as simulate_strategy.
+
     Args:
         strategy: TradingStrategy インスタンス
         bars_5min: 5分足 OHLCV
@@ -161,6 +196,9 @@ def simulate_single_trade(
     if entry_idx >= n:
         return None
 
+    opens = bars_5min["open"].to_numpy()
+    highs = bars_5min["high"].to_numpy()
+    lows = bars_5min["low"].to_numpy()
     closes = bars_5min["close"].to_numpy()
     entry_price = float(closes[entry_idx])
     merged_params = {**params, "stop_multiplier": stop_multiplier, "target_multiplier": target_multiplier}
@@ -173,36 +211,30 @@ def simulate_single_trade(
     )
 
     for i in range(entry_idx + 1, n):
-        current = float(closes[i])
-        if current <= stop_price:
-            pnl_pct = (stop_price - entry_price) / entry_price - cost_pct / 100.0
+        exit_outcome = _check_exit_at_bar(
+            float(opens[i]), float(highs[i]), float(lows[i]), float(closes[i]),
+            stop_price, target_price,
+        )
+        if exit_outcome is not None:
+            exit_type, fill_price = exit_outcome
+            pnl_pct = (fill_price - entry_price) / entry_price - cost_pct / 100.0
             return {
                 "entry_ts": bars_5min.index[entry_idx],
                 "exit_ts": bars_5min.index[i],
                 "entry_price": entry_price,
-                "exit_price": float(stop_price),
-                "exit_type": "stop",
-                "bars_held": i - entry_idx,
-                "pnl_pct": pnl_pct,
-            }
-        if current >= target_price:
-            pnl_pct = (target_price - entry_price) / entry_price - cost_pct / 100.0
-            return {
-                "entry_ts": bars_5min.index[entry_idx],
-                "exit_ts": bars_5min.index[i],
-                "entry_price": entry_price,
-                "exit_price": float(target_price),
-                "exit_type": "target",
+                "exit_price": float(fill_price),
+                "exit_type": exit_type,
                 "bars_held": i - entry_idx,
                 "pnl_pct": pnl_pct,
             }
         if i - entry_idx >= max_hold_bars:
-            pnl_pct = (current - entry_price) / entry_price - cost_pct / 100.0
+            close_p = float(closes[i])
+            pnl_pct = (close_p - entry_price) / entry_price - cost_pct / 100.0
             return {
                 "entry_ts": bars_5min.index[entry_idx],
                 "exit_ts": bars_5min.index[i],
                 "entry_price": entry_price,
-                "exit_price": current,
+                "exit_price": close_p,
                 "exit_type": "time",
                 "bars_held": i - entry_idx,
                 "pnl_pct": pnl_pct,
