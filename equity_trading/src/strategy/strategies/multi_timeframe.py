@@ -31,12 +31,13 @@ class MultiTimeframeStrategy(TradingStrategy):
         rsi_5 = compute_rsi(bars_5min["close"], period=14)
         cond_5 = (rsi_5 < rsi_5_th).fillna(False)
 
+        # 15min RSI（5min を 3本ずつまとめる）— shift(1) to prevent look-ahead
         bars_15 = bars_5min["close"].resample("15min").last().dropna()
-        rsi_15 = compute_rsi(bars_15, period=14)
+        rsi_15 = compute_rsi(bars_15, period=14).shift(1)
         cond_15_5min = (rsi_15 < rsi_15_th).reindex(bars_5min.index, method="pad").fillna(False)
 
         bars_60 = bars_5min["close"].resample("60min").last().dropna()
-        rsi_60 = compute_rsi(bars_60, period=14)
+        rsi_60 = compute_rsi(bars_60, period=14).shift(1)
         cond_60_5min = (rsi_60 < rsi_60_th).reindex(bars_5min.index, method="pad").fillna(False)
 
         signal = daily_above_ma & cond_5 & cond_15_5min & cond_60_5min
