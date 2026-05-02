@@ -42,15 +42,14 @@ def simulate_strategy(
 
     entry_signal = strategy.compute_entry_signal(bars_5min, daily, atr_pct, params)
 
-    stop_pct = atr_pct * stop_multiplier / 100.0
-    target_pct = atr_pct * target_multiplier / 100.0
-
     closes = bars_5min["close"].values
     n = len(closes)
     trade_records: list[dict] = []
     in_position = False
     entry_idx = -1
     entry_price = 0.0
+    stop_price = 0.0
+    target_price = 0.0
 
     for i in range(n - 1):
         if not in_position and bool(entry_signal.iloc[i]):
@@ -59,12 +58,14 @@ def simulate_strategy(
             if entry_idx >= n:
                 break
             entry_price = closes[entry_idx]
+            merged_params = {**params, "stop_multiplier": stop_multiplier, "target_multiplier": target_multiplier}
+            stop_price, target_price = strategy.compute_exit_levels(
+                bars_5min, entry_idx, entry_price, atr_pct, merged_params,
+            )
         elif in_position:
             current = closes[i]
-            stop_price = entry_price * (1 - stop_pct)
-            target_price = entry_price * (1 + target_pct)
             if current <= stop_price:
-                pnl_fraction = -stop_pct - cost_pct / 100.0
+                pnl_fraction = (stop_price - entry_price) / entry_price - cost_pct / 100.0
                 trade_records.append({
                     "entry_ts": bars_5min.index[entry_idx],
                     "exit_ts": bars_5min.index[i],
@@ -76,7 +77,7 @@ def simulate_strategy(
                 })
                 in_position = False
             elif current >= target_price:
-                pnl_fraction = target_pct - cost_pct / 100.0
+                pnl_fraction = (target_price - entry_price) / entry_price - cost_pct / 100.0
                 trade_records.append({
                     "entry_ts": bars_5min.index[entry_idx],
                     "exit_ts": bars_5min.index[i],

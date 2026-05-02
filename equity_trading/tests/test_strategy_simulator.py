@@ -164,3 +164,90 @@ def test_simulate_strategy_default_return_unchanged():
     # Backwards compat: dict, not tuple
     assert isinstance(result, dict)
     assert result["trade_count"] == 0
+
+
+def test_simulate_strategy_calls_compute_exit_levels():
+    """The simulator must invoke strategy.compute_exit_levels per entry."""
+    n = 60
+    closes = np.full(n, 100.0)
+    bars = pd.DataFrame(
+        {"open": closes, "high": closes + 0.05, "low": closes - 0.05, "close": closes, "volume": [10000] * n},
+        index=pd.date_range("2024-01-01 14:30", periods=n, freq="5min", tz="UTC"),
+    )
+    daily = pd.DataFrame(
+        {"close": [100.0] * 250},
+        index=pd.date_range("2023-01-01", periods=250, freq="1D", tz="UTC"),
+    )
+
+    call_log: list = []
+
+    class SpyStrategy(MeanReversionStrategy):
+        name = "spy"
+
+        def compute_entry_signal(self, bars_5min, daily, atr_pct, params):
+            sig = pd.Series([False] * len(bars_5min), index=bars_5min.index, dtype=bool)
+            sig.iloc[0] = True
+            return sig
+
+        def compute_exit_levels(self, bars_5min, entry_idx, entry_price, atr_pct, params):
+            call_log.append({"entry_idx": entry_idx, "entry_price": entry_price, "atr_pct": atr_pct})
+            return super().compute_exit_levels(bars_5min, entry_idx, entry_price, atr_pct, params)
+
+    summary = simulate_strategy(
+        strategy=SpyStrategy(),
+        bars_5min=bars,
+        daily=daily,
+        atr_pct=0.10,
+        params={},
+        max_hold_bars=5,
+    )
+    assert summary["trade_count"] == 1
+    assert len(call_log) == 1
+    # Entry idx is bar 1 (filled on bar after signal)
+    assert call_log[0]["entry_idx"] == 1
+    assert call_log[0]["entry_price"] == 100.0
+    assert call_log[0]["atr_pct"] == 0.10
+
+
+def test_simulate_strategy_custom_exit_changes_outcome():
+    """Tight custom stop fires while default ATR stop wouldn't."""
+    n = 60
+    # Drop by 0.5% on bar 5
+    closes = np.full(n, 100.0)
+    closes[5:] = 99.50  # -0.5%
+    bars = pd.DataFrame(
+        {"open": closes, "high": closes + 0.05, "low": closes - 0.05, "close": closes, "volume": [10000] * n},
+        index=pd.date_range("2024-01-01 14:30", periods=n, freq="5min", tz="UTC"),
+    )
+    daily = pd.DataFrame(
+        {"close": [100.0] * 250},
+        index=pd.date_range("2023-01-01", periods=250, freq="1D", tz="UTC"),
+    )
+
+    class TightStopStrategy(MeanReversionStrategy):
+        name = "tight"
+
+        def compute_entry_signal(self, bars_5min, daily, atr_pct, params):
+            sig = pd.Series([False] * len(bars_5min), index=bars_5min.index, dtype=bool)
+            sig.iloc[0] = True
+            return sig
+
+        def compute_exit_levels(self, bars_5min, entry_idx, entry_price, atr_pct, params):
+            # 0.3% stop, 1% target  (tighter than default 0.15% stop / 0.24% target so this hits)
+            return entry_price * 0.997, entry_price * 1.01
+
+    summary, trades = simulate_strategy(
+        strategy=TightStopStrategy(),
+        bars_5min=bars,
+        daily=daily,
+        atr_pct=0.10,  # default stop = 0.10*1.5/100 = 0.15% (would also stop at -0.5%)
+        params={},
+        max_hold_bars=50,
+        return_trades=True,
+    )
+    assert summary["trade_count"] == 1
+    # Both default and custom stop would fire at -0.5%; but verify the exit price uses CUSTOM stop, not default
+    # Custom stop = 100 * 0.997 = 99.70. Pnl = (99.70 - 100)/100 - cost = -0.003 - 0.001 = -0.004 = -0.4%
+    assert trades.iloc[0]["exit_type"] == "stop"
+    # avg_pnl_pct = -0.4% (not -0.25% which is default ATR stop at 0.10*1.5/100 = 0.0015 = 0.15%)
+    assert summary["avg_pnl_pct"] == pytest.approx(-0.4, abs=0.01)
