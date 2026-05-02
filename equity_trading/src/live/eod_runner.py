@@ -34,11 +34,13 @@ def run_eod(
         conn.commit()
 
     try:
-        # Find all open positions
+        # Find all open positions that should be force-closed at EOD.
+        # Positions with hold_overnight=1 (e.g. pre_fomc_drift) are skipped here
+        # and closed by their dedicated runner.
         with sqlite3.connect(db_path) as conn:
             open_rows = conn.execute(
                 """SELECT id, symbol, entry_price, entry_qty FROM positions
-                   WHERE status = 'open'"""
+                   WHERE status = 'open' AND COALESCE(hold_overnight, 0) = 0"""
             ).fetchall()
 
         for pid, symbol, entry_price, entry_qty in open_rows:

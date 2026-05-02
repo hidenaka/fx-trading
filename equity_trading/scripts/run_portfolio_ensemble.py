@@ -29,15 +29,14 @@ from equity_trading.src.strategy.strategies.mean_reversion import MeanReversionS
 from equity_trading.src.strategy.strategies.pre_fomc import PreFOMCDriftStrategy
 
 
-# Selected strategies based on post-fix phase0 results (EV > 0, n >= 15).
-# Each entry: (StrategyClass, symbol, params, label)
+# Long-data validated strategies (2019-05-01 to 2026-05-01, post-fix simulator).
+# EV > 0 with n >= 30 on 7-yr data. Dropped XLK gap_fill (was 2024-2026 fluke).
 SELECTED = [
-    (GapFillStrategy,        "SPY", {"gap_threshold": 0.003, "stop_extension": 0.005}, "gap_fill_SPY"),
     (GapFillStrategy,        "QQQ", {"gap_threshold": 0.003, "stop_extension": 0.005}, "gap_fill_QQQ"),
-    (GapFillStrategy,        "DIA", {"gap_threshold": 0.003, "stop_extension": 0.005}, "gap_fill_DIA"),
-    (GapFillStrategy,        "XLK", {"gap_threshold": 0.005, "stop_extension": 0.005}, "gap_fill_XLK"),
-    (PreFOMCDriftStrategy,   "XLK", {"entry_bar_pos": 36, "_max_hold_bars": 95},      "pre_fomc_XLK"),
-    (MeanReversionStrategy,  "XLK", {"threshold": 0.40},                              "mean_rev_XLK"),
+    (GapFillStrategy,        "QQQ", {"gap_threshold": 0.005, "stop_extension": 0.005}, "gap_fill_QQQ_tight"),
+    (GapFillStrategy,        "SPY", {"gap_threshold": 0.005, "stop_extension": 0.005}, "gap_fill_SPY"),
+    (GapFillStrategy,        "DIA", {"gap_threshold": 0.005, "stop_extension": 0.005}, "gap_fill_DIA"),
+    (PreFOMCDriftStrategy,   "XLK", {"entry_bar_pos": 36, "_max_hold_bars": 95},       "pre_fomc_XLK"),
 ]
 
 
@@ -181,7 +180,8 @@ def main() -> int:
     project_root = Path(__file__).resolve().parents[1]
     cache_dir = project_root / "data" / "prices"
 
-    period_start = datetime(2024, 5, 1, tzinfo=timezone.utc)
+    # Use long history (2019-2026 = 7 years) for robust validation
+    period_start = datetime(2019, 5, 1, tzinfo=timezone.utc)
     period_end = datetime(2026, 5, 1, tzinfo=timezone.utc)
 
     env_path = project_root / ".env"
@@ -288,7 +288,7 @@ def main() -> int:
     md.append("**Caveat:** the 2-yr window includes a structurally bullish 2025 sub-period; "
               "live performance is likely below the mean estimate.")
 
-    out_path = project_root / "phase0" / "portfolio_ensemble.md"
+    out_path = project_root / "phase0" / "portfolio_ensemble_long.md"
     out_path.write_text("\n".join(md), encoding="utf-8")
     print(f"\n[saved] {out_path}")
     return 0

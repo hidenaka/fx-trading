@@ -194,8 +194,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Multi-strategy Phase 0")
     parser.add_argument("--symbols", nargs="+", default=DEFAULT_SYMBOLS)
     parser.add_argument("--days", type=int, default=730)
+    parser.add_argument("--start", type=str, default=None,
+                        help="Override start date (YYYY-MM-DD). When set with --end, --days is ignored.")
+    parser.add_argument("--end", type=str, default=None,
+                        help="Override end date (YYYY-MM-DD).")
+    parser.add_argument("--report-suffix", type=str, default="",
+                        help="Append suffix to comparison_report filename (e.g. '_long')")
     args = parser.parse_args()
 
-    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    start = end - timedelta(days=args.days)
-    sys.exit(main(symbols=args.symbols, start=start, end=end))
+    if args.start and args.end:
+        start = datetime.fromisoformat(args.start).replace(tzinfo=timezone.utc)
+        end = datetime.fromisoformat(args.end).replace(tzinfo=timezone.utc)
+    else:
+        end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = end - timedelta(days=args.days)
+
+    project_root = Path(__file__).resolve().parents[1]
+    report_path = (project_root / "phase0" / f"comparison_report{args.report_suffix}.md")
+    sys.exit(main(symbols=args.symbols, start=start, end=end, report_path=report_path))

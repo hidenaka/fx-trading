@@ -52,7 +52,8 @@ SCHEMA_PLAN2 = [
         exit_type TEXT,
         pnl_pct REAL,
         realized_pnl_usd REAL,
-        status TEXT NOT NULL DEFAULT 'open'
+        status TEXT NOT NULL DEFAULT 'open',
+        hold_overnight INTEGER NOT NULL DEFAULT 0
     );
     """,
     """
@@ -82,8 +83,16 @@ SCHEMA_PLAN2 = [
 ]
 
 
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl_fragment: str) -> None:
+    """Add a column if it doesn't exist (idempotent for older DBs)."""
+    cur = conn.execute(f"PRAGMA table_info({table})")
+    existing = {row[1] for row in cur.fetchall()}
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl_fragment}")
+
+
 def init_database(db_path: Path | str) -> None:
-    """SQLite を初期化する。WALモード有効化＆Phase 0スキーマ作成."""
+    """SQLite を初期化する。WALモード有効化＆スキーマ作成 (idempotent)."""
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -95,4 +104,7 @@ def init_database(db_path: Path | str) -> None:
             conn.execute(ddl)
         for ddl in SCHEMA_PLAN2:
             conn.execute(ddl)
+        # Idempotent column adds for upgrade paths
+        _ensure_column(conn, "positions", "hold_overnight",
+                       "hold_overnight INTEGER NOT NULL DEFAULT 0")
         conn.commit()

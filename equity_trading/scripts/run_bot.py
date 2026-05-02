@@ -21,12 +21,16 @@ from equity_trading.src.data.price_fetcher import PriceFetcher
 from equity_trading.src.live.eod_runner import run_eod
 from equity_trading.src.live.intraday_runner import run_intraday
 from equity_trading.src.live.morning_runner import run_morning
+from equity_trading.src.live.pre_fomc_runner import run_pre_fomc, run_fomc_close
 from equity_trading.src.state.migrations import init_database
 
 
 DEFAULT_DB_PATH = "equity_trading/data/trades.sqlite"
 DEFAULT_CACHE_DIR = "equity_trading/data/prices"
-DEFAULT_SYMBOLS = ["SPY", "QQQ", "IWM", "XLK"]
+# Long-data (7-yr) validated: drop XLK gap_fill (sample artifact in 2024-2026),
+# keep IWM (modest +EV on 7-yr), add DIA. QQQ is the standout (EV +18.35).
+DEFAULT_SYMBOLS = ["SPY", "QQQ", "DIA", "IWM"]
+PRE_FOMC_SYMBOL = "XLK"  # XLK pre-FOMC drift confirmed on 7-yr data: WR 0.649, EV +30.83.
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -35,6 +39,10 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--morning", action="store_true", help="Run gap_fill at market open")
     mode.add_argument("--intraday", action="store_true", help="Run mean_reversion (every 5min)")
     mode.add_argument("--eod", action="store_true", help="Close positions, write summary")
+    mode.add_argument("--pre-fomc", action="store_true",
+                      help="Place pre-FOMC long XLK at ~12:30 ET on day before FOMC")
+    mode.add_argument("--fomc-close", action="store_true",
+                      help="Close hold-overnight positions at ~13:55 ET on FOMC day")
     mode.add_argument("--check", action="store_true", help="Connectivity check only (no orders, no DB writes)")
     parser.add_argument("--db-path", default=DEFAULT_DB_PATH)
     parser.add_argument("--cache-dir", default=DEFAULT_CACHE_DIR)
@@ -122,6 +130,33 @@ def main(argv: list[str] | None = None) -> int:
                 now_utc=now_utc,
             )
             print(summary.get("summary_md", ""))
+        elif args.pre_fomc:
+            print(f"[run_bot] Pre-FOMC entry check at {now_utc.isoformat()}")
+            summary = run_pre_fomc(
+                symbol=PRE_FOMC_SYMBOL,
+                db_path=db_path,
+                broker=broker,
+                fetcher=fetcher,
+                now_utc=now_utc,
+            )
+            print(f"  Entries placed: {summary.get('entries_placed', 0)}")
+            if summary.get("halted"):
+                print("  Circuit halted.")
+            if summary.get("errors"):
+                for e in summary["errors"]:
+                    print(f"  [warn] {e}")
+        elif args.fomc_close:
+            print(f"[run_bot] FOMC closer at {now_utc.isoformat()}")
+            summary = run_fomc_close(
+                db_path=db_path,
+                broker=broker,
+                fetcher=fetcher,
+                now_utc=now_utc,
+            )
+            print(f"  Positions closed: {summary.get('positions_closed', 0)}")
+            if summary.get("errors"):
+                for e in summary["errors"]:
+                    print(f"  [warn] {e}")
         return 0
     except Exception as e:
         print(f"[ERROR] {type(e).__name__}: {e}", file=sys.stderr)

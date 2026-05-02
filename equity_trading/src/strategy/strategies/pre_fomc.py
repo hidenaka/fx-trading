@@ -28,6 +28,26 @@ class PreFOMCDriftStrategy(TradingStrategy):
     # FOMC announcement dates (the second day of each meeting; statement ~14:00 ET).
     # Source: Federal Reserve official meeting calendar.
     DEFAULT_FOMC_DATES: list[dt.date] = [
+        # 2019
+        dt.date(2019, 5, 1), dt.date(2019, 6, 19), dt.date(2019, 7, 31),
+        dt.date(2019, 9, 18), dt.date(2019, 10, 30), dt.date(2019, 12, 11),
+        # 2020
+        dt.date(2020, 1, 29), dt.date(2020, 3, 3), dt.date(2020, 3, 15),
+        dt.date(2020, 3, 18), dt.date(2020, 4, 29), dt.date(2020, 6, 10),
+        dt.date(2020, 7, 29), dt.date(2020, 9, 16), dt.date(2020, 11, 5),
+        dt.date(2020, 12, 16),
+        # 2021
+        dt.date(2021, 1, 27), dt.date(2021, 3, 17), dt.date(2021, 4, 28),
+        dt.date(2021, 6, 16), dt.date(2021, 7, 28), dt.date(2021, 9, 22),
+        dt.date(2021, 11, 3), dt.date(2021, 12, 15),
+        # 2022
+        dt.date(2022, 1, 26), dt.date(2022, 3, 16), dt.date(2022, 5, 4),
+        dt.date(2022, 6, 15), dt.date(2022, 7, 27), dt.date(2022, 9, 21),
+        dt.date(2022, 11, 2), dt.date(2022, 12, 14),
+        # 2023
+        dt.date(2023, 2, 1), dt.date(2023, 3, 22), dt.date(2023, 5, 3),
+        dt.date(2023, 6, 14), dt.date(2023, 7, 26), dt.date(2023, 9, 20),
+        dt.date(2023, 11, 1), dt.date(2023, 12, 13),
         # 2024
         dt.date(2024, 1, 31), dt.date(2024, 3, 20), dt.date(2024, 5, 1),
         dt.date(2024, 6, 12), dt.date(2024, 7, 31), dt.date(2024, 9, 18),

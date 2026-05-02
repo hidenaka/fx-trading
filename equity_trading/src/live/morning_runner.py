@@ -13,10 +13,13 @@ from equity_trading.src.strategy.strategies.gap_fill import GapFillStrategy
 
 
 GAP_FILL_PARAMS_PER_SYMBOL: dict[str, dict] = {
-    "SPY": {"gap_threshold": 0.003, "stop_extension": 0.005},
-    "QQQ": {"gap_threshold": 0.005, "stop_extension": 0.005},
-    "IWM": {"gap_threshold": 0.010, "stop_extension": 0.010},
-    "XLK": {"gap_threshold": 0.005, "stop_extension": 0.005},
+    # Long-data validated (7 yr, 2019-05–2026-05; post-fix simulator).
+    # XLK dropped: positive EV in 2024-2026 only (sample artifact);
+    # negative across all params on 7-year window.
+    "SPY": {"gap_threshold": 0.005, "stop_extension": 0.005},  # n=81,  EV +3.08
+    "QQQ": {"gap_threshold": 0.003, "stop_extension": 0.005},  # n=213, EV +18.35 ★
+    "DIA": {"gap_threshold": 0.005, "stop_extension": 0.005},  # n=75,  EV +3.02
+    "IWM": {"gap_threshold": 0.010, "stop_extension": 0.010},  # n=33,  EV +4.97
 }
 
 DEFAULT_ATR_PCT = 0.10  # placeholder — gap_fill doesn't use ATR for exits
