@@ -102,6 +102,28 @@
 
 **Best for multi_timeframe:** XLK / `{"rsi_15min_threshold": 30.0, "rsi_5min_threshold": 25.0, "rsi_60min_threshold": 35.0}` → EV -1.13 (WR 0.515, Trades 33)
 
+## 戦略: analysis_driven_reversion
+
+| Symbol | Params | Trades | Wins | Win Rate | Avg P&L | Expected (P&L×Count) |
+|--------|--------|--------|------|----------|---------|----------------------|
+| SPY | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.3}` | 95 | 43 | 0.453 | -0.083% | -7.84 |
+| SPY | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` | 134 | 57 | 0.425 | -0.089% | -11.98 |
+| SPY | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.2}` | 623 | 257 | 0.413 | -0.092% | -57.16 |
+| QQQ | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.3}` | 107 | 48 | 0.449 | -0.077% | -8.28 |
+| QQQ | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` | 144 | 59 | 0.410 | -0.090% | -12.95 |
+| QQQ | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.2}` | 579 | 237 | 0.409 | -0.090% | -52.16 |
+| IWM | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.3}` | 93 | 45 | 0.484 | -0.063% | -5.84 |
+| IWM | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` | 127 | 54 | 0.425 | -0.085% | -10.77 |
+| IWM | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.2}` | 547 | 227 | 0.415 | -0.088% | -48.35 |
+| DIA | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.3}` | 43 | 19 | 0.442 | -0.084% | -3.60 |
+| DIA | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` | 78 | 35 | 0.449 | -0.082% | -6.38 |
+| DIA | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.2}` | 446 | 186 | 0.417 | -0.091% | -40.37 |
+| XLK | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.3}` | 31 | 11 | 0.355 | -0.115% | -3.56 |
+| XLK | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` | 45 | 20 | 0.444 | -0.070% | -3.14 |
+| XLK | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.2}` | 227 | 97 | 0.427 | -0.078% | -17.80 |
+
+**Best for analysis_driven_reversion:** XLK / `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` → EV -3.14 (WR 0.444, Trades 45)
+
 ## 横断比較：戦略別ベスト
 
 | Rank | Strategy | Symbol | Params | EV | Win Rate | Trades |
@@ -109,8 +131,9 @@
 | 1 | mean_reversion | XLK | `{"threshold": 0.4}` | 1.01 | 0.639 | 36 |
 | 2 | env_dependent_reversion | XLK | `{"threshold": 0.4}` | 0.38 | 0.619 | 21 |
 | 3 | multi_timeframe | XLK | `{"rsi_15min_threshold": 30.0, "rsi_5min_threshold": 25.0, "rsi_60min_threshold": 35.0}` | -1.13 | 0.515 | 33 |
-| 4 | momentum_breakout | XLK | `{"breakout_period": 78, "volume_multiplier": 2.0}` | -8.94 | 0.468 | 158 |
-| 5 | trend_follow | XLK | `{"breakout_period": 50, "rsi_threshold": 55.0}` | -25.26 | 0.444 | 356 |
+| 4 | analysis_driven_reversion | XLK | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` | -3.14 | 0.444 | 45 |
+| 5 | momentum_breakout | XLK | `{"breakout_period": 78, "volume_multiplier": 2.0}` | -8.94 | 0.468 | 158 |
+| 6 | trend_follow | XLK | `{"breakout_period": 50, "rsi_threshold": 55.0}` | -25.26 | 0.444 | 356 |
 
 ## 推奨：**mean_reversion** （XLK、EV 1.01）
 
