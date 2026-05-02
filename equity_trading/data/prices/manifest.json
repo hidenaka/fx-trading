@@ -1,0 +1,25 @@
+{
+  "cutoff_date": "2024-05-01",
+  "file_hashes": {
+    "holdout/TECL_1440min.parquet": "35993aeacd2588ad47c0c617d6b5a457c7aa4288011cb32822c8e1f1b118f997",
+    "holdout/TECL_5min.parquet": "ebdbe12b5a2c72fa20c1861eedbf4073e11c8e75a64089eca1646eaae3a23364",
+    "holdout/TNA_1440min.parquet": "0ba76e1a9e401913aba643d83ac8d1e5c72c65653f9d8c160528682436f3c985",
+    "holdout/TNA_5min.parquet": "fd40f0a3064752e6e7f0d98aa7aa69bcb45b58c9f8f8267cff9d863b27f846ef",
+    "holdout/TQQQ_1440min.parquet": "b80b768254c7c5933dff8e8d8cbe6105e30fa9d648d9324af09ea20f422550f1",
+    "holdout/TQQQ_5min.parquet": "c97e4b6ce7bd4e76d663de70ca7807191f2bfc1ad529c4bd13ca6f0415debc31",
+    "holdout/UDOW_1440min.parquet": "590b94afcb8d8b74049b7be4893de2f1cde02e804476dcbedb259849cb03599d",
+    "holdout/UDOW_5min.parquet": "a3c622b3d0bb8bce947e40cefcefc2f2a367bc9e8e3759be06f151d4b6923998",
+    "holdout/UPRO_1440min.parquet": "94fe055f87925f58643009ab00c8bc73027351d0461e35055bc90f3f11be0d0f",
+    "holdout/UPRO_5min.parquet": "d304c56e516234660501c70ffc15a014e83ad3d07d508b205043aae1763c43ab",
+    "train/TECL_1440min.parquet": "50ee5b1680b85b7cbcb949f68d451829244336bb29b652dd2a6a707a94465fe8",
+    "train/TECL_5min.parquet": "895c9e691d86ab447dbe65bbc131f3e517e3e397177ffce766b8e47f22833c57",
+    "train/TNA_1440min.parquet": "a37bb1f9cba3773c3be639de24806158d88b93e313de97a710f5c3d1b5ba2766",
+    "train/TNA_5min.parquet": "48bec21188990b79407bc6e4c7f4c956a0da51c09b7de7b9b00b3f17d20760db",
+    "train/TQQQ_1440min.parquet": "c00e3f0aa0ab5d47e8b6923191ae618db7a5bf0cee766558d5e6c797e7ca83a7",
+    "train/TQQQ_5min.parquet": "aa29a51f3ea0be2723c3a29a92a7ff6445b4a63d4c2e1b522a7befad1caef4a6",
+    "train/UDOW_1440min.parquet": "798b648a2041de22500701643891c18a9b9a1d65297f39ecdc7aa03e83538430",
+    "train/UDOW_5min.parquet": "a75e5af58219766ff876b33c68ddb8287839688f9ff8babe843748fdd889adf6",
+    "train/UPRO_1440min.parquet": "8128dae0ec39c669d6eeaf696191cd60e7afdc860931fc46bd1706c22e98d130",
+    "train/UPRO_5min.parquet": "b3589319bf78ea2147565b30e06943b5e6742b1fe41cfbfcd2f0de6e6f56a859"
+  }
+}
