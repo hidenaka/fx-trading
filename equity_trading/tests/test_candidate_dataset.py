@@ -68,7 +68,12 @@ def test_generate_candidates_mean_reversion_with_loose_threshold():
 
 
 def test_generate_candidates_gap_fill():
-    """gap_fill candidates fire only at first bar of each NY day."""
+    """gap_fill candidates fire only at the first bar of each NY day (bar_pos == 0).
+
+    The parquet may contain pre-market bars (first bar could be 04:00 ET or 00:00 ET),
+    so we validate bar_pos == 0 via the bars_since_open feature rather than a hard-coded
+    NY hour.
+    """
     bars = _make_bars(200)
     daily = _daily_above_ma()
     candidates = generate_candidates(
@@ -76,13 +81,13 @@ def test_generate_candidates_gap_fill():
         symbol="SPY", strategy_name="gap_fill",
         relaxed_params={"gap_threshold": 0.0015, "stop_extension": 0.005},
     )
-    # gap_fill at very loose threshold should fire on most days where prev_close exists
-    # All candidates should be at NY 09:30 (= UTC 14:30 winter).
-    # _make_bars starts at 14:30 UTC, so bar 0 is the first bar of day 1
+    # gap_fill must only fire on the first bar of the NY trading day (bars_since_open == 0)
     if candidates:
         for c in candidates:
-            # ny_hour is 9 (NY 09:30 winter, 09:30 summer -- both hour 9)
-            assert c.features["ny_hour"] == 9
+            assert c.features["bars_since_open"] == 0.0, (
+                f"gap_fill candidate at {c.timestamp} has bars_since_open="
+                f"{c.features['bars_since_open']}, expected 0"
+            )
 
 
 def test_features_have_no_lookahead():

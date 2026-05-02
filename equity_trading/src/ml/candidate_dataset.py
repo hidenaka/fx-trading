@@ -75,16 +75,23 @@ def generate_candidates(
         bars_5min, daily, spy_5min, strategy_name, relaxed_params,
     )
 
-    # gap_fill is an at-open strategy — only valid during market hours (9:00-9:59 NY)
-    ny_hours_arr = bars_5min.index.tz_convert("America/New_York").hour
+    # gap_fill fires on the first bar of each NY trading day (bar_pos == 0).
+    # Filter by position rather than a hard-coded hour so the code works for both
+    # standard market-hours parquets (first bar ~09:30 ET) and extended-hours parquets
+    # (first bar ~04:00 ET).
+    ny_date_series = pd.Series(
+        bars_5min.index.tz_convert("America/New_York").date,
+        index=bars_5min.index,
+    )
+    bar_pos_arr = bars_5min.groupby(ny_date_series).cumcount().to_numpy()
 
     candidates: list[CandidateSignal] = []
     signal_arr = signal_series.to_numpy()
     for i, fired in enumerate(signal_arr):
         if not fired:
             continue
-        # gap_fill signals must be during market open hour (9 AM NY)
-        if strategy_name == "gap_fill" and ny_hours_arr[i] != 9:
+        # gap_fill signals must be the first bar of the NY trading day
+        if strategy_name == "gap_fill" and bar_pos_arr[i] != 0:
             continue
         feat = {}
         for k, arr in feature_arrays.items():
