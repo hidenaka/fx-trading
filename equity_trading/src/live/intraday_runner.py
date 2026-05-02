@@ -5,6 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from equity_trading.src.live.circuit_breaker import check_circuit
 from equity_trading.src.live.position_manager import check_capacity
 from equity_trading.src.live.signal_evaluator import evaluate_live_signal
 from equity_trading.src.strategy.strategies.mean_reversion import MeanReversionStrategy
@@ -43,6 +44,20 @@ def run_intraday(
 
     try:
         strategy = MeanReversionStrategy()
+        account = broker.get_account()
+
+        circuit = check_circuit(db_path=db_path, alpaca_account=account, now_utc=now_utc)
+        if circuit.halted:
+            finished_at = datetime.now(timezone.utc).isoformat()
+            with sqlite3.connect(db_path) as conn:
+                conn.execute(
+                    """UPDATE bot_runs SET finished_at_utc=?, status='success',
+                       error_message=?, entries_placed=0 WHERE id=?""",
+                    (finished_at, circuit.reason, run_id),
+                )
+                conn.commit()
+            return {"entries_placed": 0, "errors": [circuit.reason], "halted": True}
+
         symbol = "XLK"
 
         try:
@@ -73,7 +88,6 @@ def run_intraday(
                     bar_index=-1,
                 )
                 if signal.should_enter:
-                    account = broker.get_account()
                     cap = check_capacity(
                         symbol=symbol,
                         reference_price=signal.entry_reference_price,

@@ -150,3 +150,37 @@ def test_intraday_runner_logs_bot_run(tmp_path):
     with sqlite3.connect(db) as conn:
         rows = conn.execute("SELECT run_type, status FROM bot_runs").fetchall()
     assert any(r == ("intraday", "success") for r in rows)
+
+
+def test_intraday_runner_halts_when_circuit_broken(tmp_path):
+    """If today's losses >= -2%, intraday runner halts."""
+    import sqlite3
+
+    db = tmp_path / "trades.sqlite"
+    init_database(db)
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            """INSERT INTO positions (symbol, strategy_name, entry_ts_utc,
+               entry_price, entry_qty, stop_price, target_price, exit_ts_utc,
+               exit_price, exit_type, pnl_pct, realized_pnl_usd, status)
+               VALUES ('SPY', 'gap_fill', '2026-05-04T13:30:00Z', 100.0, 25,
+               99.0, 102.0, '2026-05-04T15:00:00Z', 88.0, 'stop', -0.12, -300.0, 'closed')""",
+        )
+        conn.commit()
+
+    fetcher = MagicMock()
+    def fake(symbol, start, end, timeframe_minutes):
+        if timeframe_minutes == 5:
+            return _make_5min_bars_no_signal()
+        return _daily_above_ma()
+    fetcher.fetch.side_effect = fake
+
+    broker = MagicMock()
+    broker.get_account.return_value = _account()
+
+    summary = run_intraday(
+        db_path=db, broker=broker, fetcher=fetcher,
+        now_utc=datetime(2026, 5, 4, 18, 0, tzinfo=timezone.utc),
+    )
+    assert summary.get("halted") is True
+    broker.submit_bracket_buy.assert_not_called()

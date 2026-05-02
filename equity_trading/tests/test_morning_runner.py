@@ -180,3 +180,42 @@ def test_morning_runner_skips_when_capacity_full(tmp_path):
     )
     assert summary["entries_placed"] == 0
     broker.submit_bracket_buy.assert_not_called()
+
+
+def test_morning_runner_halts_when_circuit_broken(tmp_path):
+    """If today's losses already exceed -2%, no new entries even if signal fires."""
+    import sqlite3
+
+    db = tmp_path / "trades.sqlite"
+    init_database(db)
+    # Seed: -$300 realized today on $10k account = -3%
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            """INSERT INTO positions (symbol, strategy_name, entry_ts_utc,
+               entry_price, entry_qty, stop_price, target_price, exit_ts_utc,
+               exit_price, exit_type, pnl_pct, realized_pnl_usd, status)
+               VALUES ('SPY', 'gap_fill', '2026-05-04T13:30:00Z', 100.0, 25,
+               99.0, 102.0, '2026-05-04T15:00:00Z', 88.0, 'stop', -0.12, -300.0, 'closed')""",
+        )
+        conn.commit()
+
+    fetcher = MagicMock()
+    def fake_fetch(symbol, start, end, timeframe_minutes):
+        if timeframe_minutes == 5:
+            return _make_first_bar(open_price=99.0)
+        return _make_daily_with_prev_close(prev_close=100.0)
+    fetcher.fetch.side_effect = fake_fetch
+
+    broker = MagicMock()
+    broker.get_account.return_value = _account()
+    broker.submit_bracket_buy = MagicMock()
+
+    summary = run_morning(
+        symbols=["QQQ"],  # would normally trigger gap_fill
+        db_path=db,
+        broker=broker,
+        fetcher=fetcher,
+        now_utc=datetime(2026, 5, 4, 13, 35, tzinfo=timezone.utc),
+    )
+    assert summary.get("halted") is True
+    broker.submit_bracket_buy.assert_not_called()
