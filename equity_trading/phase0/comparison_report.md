@@ -124,18 +124,82 @@
 
 **Best for analysis_driven_reversion:** XLK / `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` → EV -3.14 (WR 0.444, Trades 45)
 
+## 戦略: vwap_scalp
+
+| Symbol | Params | Trades | Wins | Win Rate | Avg P&L | Expected (P&L×Count) |
+|--------|--------|--------|------|----------|---------|----------------------|
+| SPY | `{"k_entry": 1.0}` | 2 | 1 | 0.500 | -0.072% | -0.14 |
+| SPY | `{"k_entry": 1.5}` | 2 | 1 | 0.500 | -0.072% | -0.14 |
+| SPY | `{"k_entry": 2.0}` | 1 | 1 | 1.000 | 0.047% | 0.05 |
+| QQQ | `{"k_entry": 1.0}` | 0 | 0 | nan | nan% | nan |
+| QQQ | `{"k_entry": 1.5}` | 0 | 0 | nan | nan% | nan |
+| QQQ | `{"k_entry": 2.0}` | 0 | 0 | nan | nan% | nan |
+| IWM | `{"k_entry": 1.0}` | 0 | 0 | nan | nan% | nan |
+| IWM | `{"k_entry": 1.5}` | 0 | 0 | nan | nan% | nan |
+| IWM | `{"k_entry": 2.0}` | 0 | 0 | nan | nan% | nan |
+| DIA | `{"k_entry": 1.0}` | 12 | 4 | 0.333 | -0.115% | -1.37 |
+| DIA | `{"k_entry": 1.5}` | 10 | 3 | 0.300 | -0.124% | -1.24 |
+| DIA | `{"k_entry": 2.0}` | 9 | 2 | 0.222 | -0.146% | -1.31 |
+| XLK | `{"k_entry": 1.0}` | 0 | 0 | nan | nan% | nan |
+| XLK | `{"k_entry": 1.5}` | 0 | 0 | nan | nan% | nan |
+| XLK | `{"k_entry": 2.0}` | 0 | 0 | nan | nan% | nan |
+
+**Best for vwap_scalp:** SPY / `{"k_entry": 2.0}` → EV 0.05 (WR 1.000, Trades 1)
+
+## 戦略: opening_range_breakout
+
+| Symbol | Params | Trades | Wins | Win Rate | Avg P&L | Expected (P&L×Count) |
+|--------|--------|--------|------|----------|---------|----------------------|
+| SPY | `{"or_window_bars": 6}` | 239 | 79 | 0.331 | -0.061% | -14.67 |
+| SPY | `{"or_window_bars": 12}` | 237 | 88 | 0.371 | -0.075% | -17.78 |
+| QQQ | `{"or_window_bars": 6}` | 231 | 100 | 0.433 | -0.058% | -13.44 |
+| QQQ | `{"or_window_bars": 12}` | 232 | 105 | 0.453 | -0.068% | -15.70 |
+| IWM | `{"or_window_bars": 6}` | 207 | 85 | 0.411 | -0.048% | -9.91 |
+| IWM | `{"or_window_bars": 12}` | 204 | 101 | 0.495 | -0.072% | -14.59 |
+| DIA | `{"or_window_bars": 6}` | 220 | 58 | 0.264 | -0.086% | -18.91 |
+| DIA | `{"or_window_bars": 12}` | 213 | 76 | 0.357 | -0.077% | -16.35 |
+| XLK | `{"or_window_bars": 6}` | 136 | 59 | 0.434 | -0.028% | -3.75 |
+| XLK | `{"or_window_bars": 12}` | 132 | 63 | 0.477 | -0.051% | -6.70 |
+
+**Best for opening_range_breakout:** XLK / `{"or_window_bars": 6}` → EV -3.75 (WR 0.434, Trades 136)
+
+## 戦略: gap_fill
+
+| Symbol | Params | Trades | Wins | Win Rate | Avg P&L | Expected (P&L×Count) |
+|--------|--------|--------|------|----------|---------|----------------------|
+| SPY | `{"gap_threshold": 0.003, "stop_extension": 0.005}` | 39 | 28 | 0.718 | 0.138% | 5.37 |
+| SPY | `{"gap_threshold": 0.005, "stop_extension": 0.005}` | 19 | 14 | 0.737 | 0.192% | 3.65 |
+| SPY | `{"gap_threshold": 0.01, "stop_extension": 0.01}` | 6 | 5 | 0.833 | 0.244% | 1.46 |
+| QQQ | `{"gap_threshold": 0.003, "stop_extension": 0.005}` | 45 | 28 | 0.622 | 0.136% | 6.14 |
+| QQQ | `{"gap_threshold": 0.005, "stop_extension": 0.005}` | 24 | 18 | 0.750 | 0.293% | 7.04 |
+| QQQ | `{"gap_threshold": 0.01, "stop_extension": 0.01}` | 10 | 7 | 0.700 | 0.472% | 4.72 |
+| IWM | `{"gap_threshold": 0.003, "stop_extension": 0.005}` | 42 | 20 | 0.476 | 0.047% | 1.96 |
+| IWM | `{"gap_threshold": 0.005, "stop_extension": 0.005}` | 30 | 15 | 0.500 | 0.121% | 3.63 |
+| IWM | `{"gap_threshold": 0.01, "stop_extension": 0.01}` | 13 | 9 | 0.692 | 0.435% | 5.65 |
+| DIA | `{"gap_threshold": 0.003, "stop_extension": 0.005}` | 34 | 18 | 0.529 | -0.029% | -1.00 |
+| DIA | `{"gap_threshold": 0.005, "stop_extension": 0.005}` | 25 | 12 | 0.480 | -0.057% | -1.43 |
+| DIA | `{"gap_threshold": 0.01, "stop_extension": 0.01}` | 5 | 3 | 0.600 | -0.154% | -0.77 |
+| XLK | `{"gap_threshold": 0.003, "stop_extension": 0.005}` | 31 | 15 | 0.484 | 0.592% | 18.35 |
+| XLK | `{"gap_threshold": 0.005, "stop_extension": 0.005}` | 17 | 13 | 0.765 | 1.403% | 23.85 |
+| XLK | `{"gap_threshold": 0.01, "stop_extension": 0.01}` | 6 | 4 | 0.667 | 3.432% | 20.59 |
+
+**Best for gap_fill:** XLK / `{"gap_threshold": 0.005, "stop_extension": 0.005}` → EV 23.85 (WR 0.765, Trades 17)
+
 ## 横断比較：戦略別ベスト
 
 | Rank | Strategy | Symbol | Params | EV | Win Rate | Trades |
 |------|----------|--------|--------|-----|----------|--------|
-| 1 | mean_reversion | XLK | `{"threshold": 0.4}` | 1.01 | 0.639 | 36 |
-| 2 | env_dependent_reversion | XLK | `{"threshold": 0.4}` | 0.38 | 0.619 | 21 |
-| 3 | multi_timeframe | XLK | `{"rsi_15min_threshold": 30.0, "rsi_5min_threshold": 25.0, "rsi_60min_threshold": 35.0}` | -1.13 | 0.515 | 33 |
-| 4 | analysis_driven_reversion | XLK | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` | -3.14 | 0.444 | 45 |
-| 5 | momentum_breakout | XLK | `{"breakout_period": 78, "volume_multiplier": 2.0}` | -8.94 | 0.468 | 158 |
-| 6 | trend_follow | XLK | `{"breakout_period": 50, "rsi_threshold": 55.0}` | -25.26 | 0.444 | 356 |
+| 1 | gap_fill | XLK | `{"gap_threshold": 0.005, "stop_extension": 0.005}` | 23.85 | 0.765 | 17 |
+| 2 | mean_reversion | XLK | `{"threshold": 0.4}` | 1.01 | 0.639 | 36 |
+| 3 | env_dependent_reversion | XLK | `{"threshold": 0.4}` | 0.38 | 0.619 | 21 |
+| 4 | vwap_scalp | SPY | `{"k_entry": 2.0}` | 0.05 | 1.000 | 1 |
+| 5 | multi_timeframe | XLK | `{"rsi_15min_threshold": 30.0, "rsi_5min_threshold": 25.0, "rsi_60min_threshold": 35.0}` | -1.13 | 0.515 | 33 |
+| 6 | analysis_driven_reversion | XLK | `{"block_lunch_hours": [11, 12], "require_spy_up": true, "threshold": 0.25}` | -3.14 | 0.444 | 45 |
+| 7 | opening_range_breakout | XLK | `{"or_window_bars": 6}` | -3.75 | 0.434 | 136 |
+| 8 | momentum_breakout | XLK | `{"breakout_period": 78, "volume_multiplier": 2.0}` | -8.94 | 0.468 | 158 |
+| 9 | trend_follow | XLK | `{"breakout_period": 50, "rsi_threshold": 55.0}` | -25.26 | 0.444 | 356 |
 
-## 推奨：**mean_reversion** （XLK、EV 1.01）
+## 推奨：**gap_fill** （XLK、EV 23.85）
 
 ## 次のステップ
 
