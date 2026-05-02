@@ -31,10 +31,16 @@ def filter_regular_hours(df: pd.DataFrame) -> pd.DataFrame:
 class PriceFetcher:
     """ブローカーから過去価格を取得し、Parquet にキャッシュ."""
 
-    def __init__(self, broker: AlpacaClient, cache_dir: Path | str) -> None:
+    def __init__(
+        self,
+        broker: AlpacaClient,
+        cache_dir: Path | str,
+        partition: str = "full",
+    ) -> None:
         self.broker = broker
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.partition = partition
 
     def fetch(
         self,
@@ -49,11 +55,25 @@ class PriceFetcher:
         ローカルキャッシュ（Parquet）に同条件のファイルがあれば優先利用、
         なければブローカー API を叩いて取得＆保存。
 
+        partition が "train", "holdout", または "full" に設定されている場合、
+        cache_dir/{partition}/{symbol}_{tf}min.parquet から読み込む。
+        パーティションファイルが存在する場合は Alpaca へのフォールバックをスキップ。
+
         Args:
             regular_hours_only: True (default) で 9:30-16:00 ET の bars に絞る。
                 pre-market/after-hours は流動性が低く、ブラケット注文が機能しないため、
                 バックテストとライブの両方で RTH-only に統一する。
         """
+        # Check for partitioned parquet file first
+        partitioned_path = self._partitioned_path(symbol, timeframe_minutes)
+        if partitioned_path.exists():
+            df = pd.read_parquet(partitioned_path)
+            # Filter to the requested [start, end) window
+            df = df.loc[(df.index >= start) & (df.index < end)]
+            # Partitioned data is pre-processed; skip RTH filtering to avoid
+            # accidentally dropping data the caller intended to include.
+            return df
+        # Legacy flat-cache path
         cache_path = self._cache_key(symbol, start, end, timeframe_minutes)
         if cache_path.exists():
             df = pd.read_parquet(cache_path)
@@ -68,6 +88,11 @@ class PriceFetcher:
         if regular_hours_only and timeframe_minutes < 1440:
             df = filter_regular_hours(df)
         return df
+
+    def _partitioned_path(self, symbol: str, timeframe_minutes: int) -> Path:
+        """Return the partition-aware parquet path: cache_dir/{partition}/{symbol}_{tf}min.parquet."""
+        tf_label = f"{timeframe_minutes}min" if timeframe_minutes < 1440 else "1day"
+        return self.cache_dir / self.partition / f"{symbol}_{tf_label}.parquet"
 
     def _cache_key(
         self,
