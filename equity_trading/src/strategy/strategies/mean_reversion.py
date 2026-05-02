@@ -38,7 +38,7 @@ class MeanReversionStrategy(TradingStrategy):
         threshold = float(params.get("threshold", 0.6))
         weights = params.get("weights", DEFAULT_WEIGHTS)
 
-        score = self._compute_combined_score(bars_5min, weights)
+        score = self.compute_combined_score(bars_5min, weights)
 
         # トレンドフィルター
         sma200 = compute_sma(daily["close"], period=200)
@@ -49,7 +49,7 @@ class MeanReversionStrategy(TradingStrategy):
         signal = (score >= threshold) & daily_above_ma
         return signal.astype(bool)
 
-    def _compute_combined_score(self, bars: pd.DataFrame, weights: dict) -> pd.Series:
+    def compute_combined_score(self, bars: pd.DataFrame, weights: dict) -> pd.Series:
         rsi = compute_rsi(bars["close"], period=14)
         rsi_score = ((30.0 - rsi) / 30.0).clip(lower=0.0, upper=1.0)
 
