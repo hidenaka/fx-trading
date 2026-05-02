@@ -40,6 +40,27 @@ class TradingStrategy(ABC):
         """
         ...
 
+    def compute_exit_levels(
+        self,
+        bars_5min: pd.DataFrame,
+        entry_idx: int,
+        entry_price: float,
+        atr_pct: float,
+        params: dict,
+    ) -> tuple[float, float]:
+        """Return (stop_price, target_price) for an entry. Default uses ATR-scaled multipliers.
+
+        Override in subclasses for non-ATR exit logic.
+        """
+        stop_mult = float(params.get("stop_multiplier", 1.5))
+        target_mult = float(params.get("target_multiplier", 2.4))
+        stop_pct = atr_pct * stop_mult / 100.0
+        target_pct = atr_pct * target_mult / 100.0
+        return (
+            entry_price * (1.0 - stop_pct),
+            entry_price * (1.0 + target_pct),
+        )
+
 
 @dataclass(frozen=True)
 class StrategyResult:
