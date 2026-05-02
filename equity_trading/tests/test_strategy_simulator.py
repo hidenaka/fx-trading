@@ -94,3 +94,73 @@ def test_simulate_strategy_max_hold_bars_caps_at_n_bars():
     assert result["trade_count"] == 1
     # avg_pnl_pct in percent: at flat price, only cost subtracts; cost_pct default 0.10 → -0.10%
     assert result["avg_pnl_pct"] == pytest.approx(-0.10, abs=0.001)
+
+
+def test_simulate_strategy_returns_trades_dataframe_when_requested():
+    n = 50
+    closes = np.full(n, 100.0)
+    bars = pd.DataFrame(
+        {"open": closes, "high": closes + 0.05, "low": closes - 0.05, "close": closes, "volume": [10000] * n},
+        index=pd.date_range("2024-01-01 14:30", periods=n, freq="5min", tz="UTC"),
+    )
+    daily = pd.DataFrame(
+        {"close": [100.0] * 250},
+        index=pd.date_range("2023-01-01", periods=250, freq="1D", tz="UTC"),
+    )
+
+    class TwoSignalsStrategy(MeanReversionStrategy):
+        name = "two_signals"
+
+        def compute_entry_signal(self, bars_5min, daily, atr_pct, params):
+            sig = pd.Series([False] * len(bars_5min), index=bars_5min.index, dtype=bool)
+            sig.iloc[0] = True
+            sig.iloc[20] = True
+            return sig
+
+    summary, trades = simulate_strategy(
+        strategy=TwoSignalsStrategy(),
+        bars_5min=bars,
+        daily=daily,
+        atr_pct=0.10,
+        params={},
+        max_hold_bars=5,
+        return_trades=True,
+    )
+    assert isinstance(summary, dict)
+    assert isinstance(trades, pd.DataFrame)
+    expected_cols = {"entry_ts", "exit_ts", "entry_price", "exit_price",
+                     "exit_type", "bars_held", "pnl_pct"}
+    assert expected_cols.issubset(trades.columns)
+    assert len(trades) == summary["trade_count"]
+    # All exits should be 'time' for flat price (no stop/target hit)
+    assert (trades["exit_type"] == "time").all()
+    # bars_held should equal max_hold_bars on time exits
+    assert (trades["bars_held"] == 5).all()
+
+
+def test_simulate_strategy_default_return_unchanged():
+    """Returning a plain dict (not a tuple) is preserved by default."""
+    n = 50
+    closes = np.full(n, 100.0)
+    bars = pd.DataFrame(
+        {"open": closes, "high": closes + 0.05, "low": closes - 0.05, "close": closes, "volume": [10000] * n},
+        index=pd.date_range("2024-01-01 14:30", periods=n, freq="5min", tz="UTC"),
+    )
+    daily = pd.DataFrame(
+        {"close": [100.0] * 250},
+        index=pd.date_range("2023-01-01", periods=250, freq="1D", tz="UTC"),
+    )
+
+    class ZeroStrategy(MeanReversionStrategy):
+        name = "zero"
+
+        def compute_entry_signal(self, bars_5min, daily, atr_pct, params):
+            return pd.Series([False] * len(bars_5min), index=bars_5min.index, dtype=bool)
+
+    result = simulate_strategy(
+        strategy=ZeroStrategy(),
+        bars_5min=bars, daily=daily, atr_pct=0.10, params={},
+    )
+    # Backwards compat: dict, not tuple
+    assert isinstance(result, dict)
+    assert result["trade_count"] == 0

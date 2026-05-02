@@ -17,6 +17,7 @@ def simulate_strategy(
     target_multiplier: float = 2.4,
     cost_pct: float = 0.10,
     max_hold_bars: int = 78,
+    return_trades: bool = False,
 ) -> dict[str, float]:
     """1戦略 × 1ETF でバックテストし、結果を辞書で返す.
 
@@ -30,9 +31,11 @@ def simulate_strategy(
         target_multiplier: 利確幅 = atr_pct * target_multiplier
         cost_pct: 往復コスト %
         max_hold_bars: 最大保持バー数（時間切れ強制決済）
+        return_trades: True の場合 (summary_dict, trades_df) を返す
 
     Returns:
         {'trade_count', 'win_count', 'win_rate', 'avg_pnl_pct'}
+        または return_trades=True の場合 (summary_dict, pd.DataFrame)
     """
     if params is None:
         params = {}
@@ -44,7 +47,7 @@ def simulate_strategy(
 
     closes = bars_5min["close"].values
     n = len(closes)
-    trades: list[float] = []
+    trade_records: list[dict] = []
     in_position = False
     entry_idx = -1
     entry_price = 0.0
@@ -61,29 +64,64 @@ def simulate_strategy(
             stop_price = entry_price * (1 - stop_pct)
             target_price = entry_price * (1 + target_pct)
             if current <= stop_price:
-                trades.append(-stop_pct - cost_pct / 100.0)
+                pnl_fraction = -stop_pct - cost_pct / 100.0
+                trade_records.append({
+                    "entry_ts": bars_5min.index[entry_idx],
+                    "exit_ts": bars_5min.index[i],
+                    "entry_price": entry_price,
+                    "exit_price": current,
+                    "exit_type": "stop",
+                    "bars_held": i - entry_idx,
+                    "pnl_pct": pnl_fraction,
+                })
                 in_position = False
             elif current >= target_price:
-                trades.append(target_pct - cost_pct / 100.0)
+                pnl_fraction = target_pct - cost_pct / 100.0
+                trade_records.append({
+                    "entry_ts": bars_5min.index[entry_idx],
+                    "exit_ts": bars_5min.index[i],
+                    "entry_price": entry_price,
+                    "exit_price": current,
+                    "exit_type": "target",
+                    "bars_held": i - entry_idx,
+                    "pnl_pct": pnl_fraction,
+                })
                 in_position = False
             elif i - entry_idx >= max_hold_bars:
-                pnl_pct = (current - entry_price) / entry_price - cost_pct / 100.0
-                trades.append(pnl_pct)
+                pnl_fraction = (current - entry_price) / entry_price - cost_pct / 100.0
+                trade_records.append({
+                    "entry_ts": bars_5min.index[entry_idx],
+                    "exit_ts": bars_5min.index[i],
+                    "entry_price": entry_price,
+                    "exit_price": current,
+                    "exit_type": "time",
+                    "bars_held": i - entry_idx,
+                    "pnl_pct": pnl_fraction,
+                })
                 in_position = False
 
-    trade_count = len(trades)
+    trade_count = len(trade_records)
+    _trade_cols = ["entry_ts", "exit_ts", "entry_price", "exit_price", "exit_type", "bars_held", "pnl_pct"]
+
     if trade_count == 0:
-        return {
+        summary = {
             "trade_count": 0,
             "win_count": 0,
             "win_rate": float("nan"),
             "avg_pnl_pct": float("nan"),
         }
+        if return_trades:
+            return summary, pd.DataFrame(trade_records, columns=_trade_cols)
+        return summary
 
-    wins = sum(1 for t in trades if t > 0)
-    return {
+    pnl_values = [r["pnl_pct"] for r in trade_records]
+    wins = sum(1 for p in pnl_values if p > 0)
+    summary = {
         "trade_count": trade_count,
         "win_count": wins,
         "win_rate": wins / trade_count,
-        "avg_pnl_pct": float(np.mean(trades) * 100.0),
+        "avg_pnl_pct": float(np.mean(pnl_values) * 100.0),
     }
+    if return_trades:
+        return summary, pd.DataFrame(trade_records, columns=_trade_cols)
+    return summary
