@@ -57,3 +57,61 @@ def test_run_holdout_simulation_returns_summary_trades_equity(tmp_path):
     assert isinstance(trades, pd.DataFrame)
     assert isinstance(equity, pd.DataFrame)
     assert "ts" in equity.columns and "equity" in equity.columns
+
+
+def test_collect_trades_excludes_warmup_period_signals(tmp_path):
+    """Synthetic trades whose entry_ts < holdout_start must be dropped."""
+    from equity_trading.src.validation.runner import _collect_trades
+    from equity_trading.src.validation.config import VariantConfig
+    from equity_trading.src.validation.data import EvaluationContext
+    import pandas as pd
+
+    # We craft a fake _collect_trades input by monkeypatching simulate_strategy
+    # to return synthetic trades, half before holdout_start and half after.
+    import equity_trading.src.validation.runner as R
+
+    holdout_start = pd.Timestamp("2024-05-01", tz="UTC")
+    fake_trades_df = pd.DataFrame({
+        "entry_ts": [holdout_start - pd.Timedelta(days=30),
+                      holdout_start + pd.Timedelta(days=1),
+                      holdout_start + pd.Timedelta(days=10)],
+        "exit_ts":  [holdout_start - pd.Timedelta(days=29),
+                      holdout_start + pd.Timedelta(days=1, hours=1),
+                      holdout_start + pd.Timedelta(days=10, hours=1)],
+        "entry_price": [100.0, 100.0, 100.0],
+        "exit_price":  [101.0, 101.0, 101.0],
+        "exit_type":   ["target", "target", "target"],
+        "bars_held":   [12, 12, 12],
+        "pnl_pct":     [0.01, 0.01, 0.01],
+    })
+
+    def _fake_simulate(**kwargs):
+        return ({}, fake_trades_df)
+
+    cfg = VariantConfig(
+        variant_id="v_test", description="",
+        strategies=[{"class": "OpeningRangeBreakoutStrategy", "symbols": ["TECL"], "params": {}}],
+        portfolio={"position_size_pct": 0.25, "max_concurrent": 3,
+                    "starting_equity_usd": 100000},
+        gates={"oos": {"holdout_start": "2024-05-01", "holdout_end": "2026-05-01",
+                       "min_outperformance_pct": 0.0},
+                "tail_risk": {"max_single_trade_loss_pct": 5.0,
+                               "max_portfolio_dd_pct": 20.0,
+                               "max_rolling_30d_loss_pct": 10.0},
+                "sample_size": {"min_holdout_trades": 30}},
+    )
+
+    class FakeCtx:
+        def load_holdout_bars(self, symbol, timeframe_minutes):
+            return pd.DataFrame()  # unused
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(R, "simulate_strategy", _fake_simulate)
+    monkey.setattr(R, "analyze_atr_distribution", lambda b, period=14: {"median_pct": 0.2})
+    try:
+        result = _collect_trades(cfg, FakeCtx())
+    finally:
+        monkey.undo()
+
+    assert len(result) == 2  # only the two trades on/after holdout_start
+    assert (result["entry_ts"] >= holdout_start).all()

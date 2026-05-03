@@ -16,6 +16,7 @@ from equity_trading.src.validation.data import EvaluationContext
 
 def _collect_trades(cfg: VariantConfig, ctx: EvaluationContext) -> pd.DataFrame:
     out: list[pd.DataFrame] = []
+    holdout_start = pd.Timestamp(cfg.gates["oos"]["holdout_start"], tz="UTC")
     for entry in cfg.strategies:
         cls = cfg.resolve_strategy_class(entry["class"])
         for symbol in entry["symbols"]:
@@ -39,6 +40,7 @@ def _collect_trades(cfg: VariantConfig, ctx: EvaluationContext) -> pd.DataFrame:
     df = pd.concat(out, ignore_index=True)
     df["entry_ts"] = pd.to_datetime(df["entry_ts"], utc=True)
     df["exit_ts"] = pd.to_datetime(df["exit_ts"], utc=True)
+    df = df[df["entry_ts"] >= holdout_start]
     df = df.drop_duplicates(subset=["symbol", "entry_ts"], keep="first")
     return df.sort_values("entry_ts").reset_index(drop=True)
 
