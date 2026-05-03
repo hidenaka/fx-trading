@@ -54,6 +54,7 @@ def simulate_strategy(
     target_multiplier: float = 2.4,
     cost_pct: float = 0.10,
     max_hold_bars: int = 78,
+    catastrophic_stop_pct: float | None = None,
     return_trades: bool = False,
 ) -> dict[str, float]:
     """1戦略 × 1ETF でバックテストし、結果を辞書で返す.
@@ -106,6 +107,9 @@ def simulate_strategy(
             stop_price, target_price = strategy.compute_exit_levels(
                 bars_5min, entry_idx, entry_price, atr_pct, merged_params,
             )
+            if catastrophic_stop_pct is not None:
+                cat_floor = entry_price * (1 - catastrophic_stop_pct / 100.0)
+                stop_price = max(stop_price, cat_floor)
         elif in_position and i > entry_idx:
             exit_outcome = _check_exit_at_bar(
                 float(opens[i]), float(highs[i]), float(lows[i]), float(closes[i]),
@@ -175,6 +179,7 @@ def simulate_single_trade(
     target_multiplier: float = 2.4,
     cost_pct: float = 0.10,
     max_hold_bars: int = 78,
+    catastrophic_stop_pct: float | None = None,
 ) -> dict | None:
     """Simulate one trade. Returns trade dict or None if not fillable.
 
@@ -213,6 +218,9 @@ def simulate_single_trade(
         atr_pct=atr_pct,
         params=merged_params,
     )
+    if catastrophic_stop_pct is not None:
+        cat_floor = entry_price * (1 - catastrophic_stop_pct / 100.0)
+        stop_price = max(stop_price, cat_floor)
 
     for i in range(entry_idx + 1, n):
         exit_outcome = _check_exit_at_bar(

@@ -458,3 +458,77 @@ def test_entry_bar_low_high_does_not_trigger_exit():
     # No exit triggered on entry bar; flat afterwards → time exit at bar 21
     assert summary["trade_count"] == 1
     assert trades.iloc[0]["exit_type"] == "time"
+
+
+def test_catastrophic_stop_caps_loss():
+    """A bar dropping 10% from entry should exit at -5% when cap=5.0."""
+    from equity_trading.src.phase0.strategy_simulator import simulate_strategy
+    from equity_trading.src.strategy.base import TradingStrategy
+
+    class _AlwaysSignalStrategy(TradingStrategy):
+        name = "_test"
+        def compute_entry_signal(self, bars_5min, daily, atr_pct, params):
+            sig = pd.Series(False, index=bars_5min.index)
+            sig.iloc[0] = True
+            return sig
+        def compute_exit_levels(self, bars_5min, entry_idx, entry_price, atr_pct, params):
+            # native stop wide at -50%, target at +50% (so the cap is what fires)
+            return entry_price * 0.5, entry_price * 1.5
+
+    closes = [100.0, 100.0, 95.0, 95.0, 95.0]
+    lows = [100.0, 100.0, 89.0, 89.0, 89.0]
+    highs = [100.0, 100.0, 101.0, 96.0, 96.0]
+    opens = [100.0, 100.0, 99.0, 95.0, 95.0]
+    bars = pd.DataFrame(
+        {"open": opens, "high": highs, "low": lows, "close": closes, "volume": [1]*5},
+        index=pd.date_range("2024-01-01", periods=5, freq="5min", tz="UTC"),
+    )
+    daily = pd.DataFrame({"close": [100.0]*5},
+                         index=pd.date_range("2024-01-01", periods=5, freq="1D", tz="UTC"))
+    summary, trades = simulate_strategy(
+        strategy=_AlwaysSignalStrategy(), bars_5min=bars, daily=daily, atr_pct=0.5,
+        catastrophic_stop_pct=5.0, cost_pct=0.0, return_trades=True,
+    )
+    assert len(trades) == 1
+    # exit at stop = entry * 0.95 = 95 → pnl_pct = -0.05
+    assert abs(trades["pnl_pct"].iloc[0] - (-0.05)) < 1e-9
+
+
+def test_catastrophic_stop_none_matches_native_behavior():
+    """cap=None reproduces pre-change trade exactly."""
+    from equity_trading.src.phase0.strategy_simulator import simulate_strategy
+    from equity_trading.src.strategy.base import TradingStrategy
+
+    class _AlwaysSignalStrategy(TradingStrategy):
+        name = "_test"
+        def compute_entry_signal(self, bars_5min, daily, atr_pct, params):
+            sig = pd.Series(False, index=bars_5min.index)
+            sig.iloc[0] = True
+            return sig
+        def compute_exit_levels(self, bars_5min, entry_idx, entry_price, atr_pct, params):
+            return entry_price * 0.97, entry_price * 1.03  # ±3%
+
+    # bar 2 low=96.5 (-3.5%) hits native stop 97
+    closes = [100.0, 100.0, 98.0, 98.0, 98.0]
+    lows = [100.0, 100.0, 96.5, 98.0, 98.0]
+    highs = [100.0, 100.0, 100.0, 99.0, 99.0]
+    opens = [100.0, 100.0, 99.0, 98.0, 98.0]
+    bars = pd.DataFrame(
+        {"open": opens, "high": highs, "low": lows, "close": closes, "volume": [1]*5},
+        index=pd.date_range("2024-01-01", periods=5, freq="5min", tz="UTC"),
+    )
+    daily = pd.DataFrame({"close": [100.0]*5},
+                         index=pd.date_range("2024-01-01", periods=5, freq="1D", tz="UTC"))
+    s_none, t_none = simulate_strategy(
+        strategy=_AlwaysSignalStrategy(), bars_5min=bars, daily=daily, atr_pct=0.5,
+        catastrophic_stop_pct=None, cost_pct=0.0, return_trades=True,
+    )
+    s_5pct, t_5pct = simulate_strategy(
+        strategy=_AlwaysSignalStrategy(), bars_5min=bars, daily=daily, atr_pct=0.5,
+        catastrophic_stop_pct=5.0, cost_pct=0.0, return_trades=True,
+    )
+    # native stop at 97 is tighter than 5%-cap floor at 95, so cap is no-op
+    assert len(t_none) == len(t_5pct) == 1
+    assert abs(t_none["pnl_pct"].iloc[0] - t_5pct["pnl_pct"].iloc[0]) < 1e-9
+    # exit price = native stop 97 → pnl = -0.03
+    assert abs(t_none["pnl_pct"].iloc[0] - (-0.03)) < 1e-9
