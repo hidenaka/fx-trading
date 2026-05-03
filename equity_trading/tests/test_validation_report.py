@@ -56,3 +56,35 @@ def test_write_validation_report(tmp_path):
     assert "REVIEW" in text
     assert "OOS" in text or "oos" in text
     assert "tail_risk" in text or "Tail" in text
+
+
+def test_report_appends_risk_profile_section(tmp_path):
+    from equity_trading.src.validation.report import write_validation_report
+    from equity_trading.src.validation.gates.base import GateResult, Status
+    import pandas as pd
+    from datetime import datetime, timezone
+
+    trades = pd.DataFrame({
+        "entry_ts": pd.to_datetime(["2024-06-01", "2024-06-02"], utc=True),
+        "exit_ts":  pd.to_datetime(["2024-06-01 16:00", "2024-06-02 16:00"], utc=True),
+        "symbol":   ["TECL", "TQQQ"],
+        "pnl_pct":  [0.01, -0.01],
+        "position_dollars": [25000, 25000],
+    })
+    gates = [GateResult(name="oos", status=Status.PASS, summary="ok",
+                         detail_md="### Gate 1\n"),
+              GateResult(name="tail_risk", status=Status.PASS, summary="ok",
+                         detail_md="### Gate 2\n"),
+              GateResult(name="sample_size", status=Status.PASS, summary="ok",
+                         detail_md="### Gate 3\n")]
+    out = tmp_path / "r.md"
+    write_validation_report(
+        path=out, variant_id="v", baseline_id="b", gates=gates,
+        git_sha="abc", manifest_hash="m",
+        holdout_window=("2024-05-01", "2026-05-01"),
+        generated_at=datetime(2026, 5, 4, tzinfo=timezone.utc),
+        variant_trades=trades,
+    )
+    text = out.read_text()
+    assert "## Risk profile" in text
+    assert "TECL" in text

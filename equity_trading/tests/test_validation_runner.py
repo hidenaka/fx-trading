@@ -57,7 +57,7 @@ def test_run_holdout_simulation_returns_summary_trades_equity(tmp_path):
     _seed_data(tmp_path)
     cfg = load_variant_config(_seed_variant(tmp_path / "v.yaml"))
     with EvaluationContext(root=tmp_path, variant_id="t", reason="test") as ctx:
-        summary, trades, equity = run_holdout_simulation(cfg, ctx)
+        summary, trades, equity, _all_signals = run_holdout_simulation(cfg, ctx)
     assert "annualized_pct" in summary
     assert "max_dd_pct" in summary
     assert "sharpe" in summary
@@ -211,3 +211,23 @@ def test_collect_trades_from_split_injects_vix_daily(monkeypatch, tmp_path):
     assert len(captured_params) == 1
     assert "_vix_daily" in captured_params[0]
     assert captured_params[0]["_vix_daily"] is fake_vix
+
+
+def test_simulate_portfolio_returns_position_dollars_per_trade():
+    """Each accepted trade should carry the position_dollars used to fill it."""
+    from equity_trading.src.validation.runner import _simulate_portfolio
+    import pandas as pd
+    trades = pd.DataFrame({
+        "entry_ts": pd.to_datetime(["2024-05-01 14:30", "2024-05-02 14:30"], utc=True),
+        "exit_ts":  pd.to_datetime(["2024-05-01 15:30", "2024-05-02 15:30"], utc=True),
+        "pnl_pct":  [0.01, -0.02],
+        "symbol":   ["TECL", "TQQQ"],
+    })
+    summary, eq_df, accepted = _simulate_portfolio(
+        trades, starting_equity=100000.0, position_size_pct=0.25, max_concurrent=3,
+    )
+    assert len(accepted) == 2
+    # First trade: 100000 * 0.25 = 25000
+    assert abs(accepted["position_dollars"].iloc[0] - 25000.0) < 0.01
+    # Second trade: equity grew by 25000 * 0.01 = 250 → 100250 * 0.25 = 25062.5
+    assert abs(accepted["position_dollars"].iloc[1] - 25062.5) < 0.01

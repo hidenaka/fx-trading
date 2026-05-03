@@ -4,9 +4,12 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
 from equity_trading.src.validation.gates.base import GateResult, Status
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 REQUIRED_GATES = {"oos", "tail_risk", "sample_size"}
 
@@ -41,6 +44,7 @@ def write_validation_report(
     manifest_hash: str,
     holdout_window: tuple[str, str],
     generated_at: datetime,
+    variant_trades: "pd.DataFrame | None" = None,
 ) -> None:
     headline = derive_headline(gates)
     lines: list[str] = []
@@ -71,6 +75,10 @@ def write_validation_report(
     lines.append(f"    --baseline configs/{baseline_id}.yaml")
     lines.append("```")
     lines.append("")
+    if variant_trades is not None and len(variant_trades) > 0:
+        from equity_trading.src.validation.risk_profile import render_risk_profile_md
+        lines.append(render_risk_profile_md(variant_trades))
+        lines.append("")
     lines.append("## Decision Log\n")
     lines.append("(Fill in: APPROVED / REJECTED / reasoning)")
     lines.append("")

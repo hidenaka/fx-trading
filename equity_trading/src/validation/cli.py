@@ -73,8 +73,8 @@ def main(argv: list[str] | None = None) -> int:
         root=args.data_root, variant_id=variant.variant_id,
         reason="cli:validate",
     ) as ctx:
-        v_summary, v_trades, v_equity = run_holdout_simulation(variant, ctx)
-        b_summary, b_trades, b_equity = run_holdout_simulation(baseline, ctx)
+        v_summary, v_trades, v_equity, _ = run_holdout_simulation(variant, ctx)
+        b_summary, b_trades, b_equity, _ = run_holdout_simulation(baseline, ctx)
 
     gates = []
     gates.append(run_oos_gate(
@@ -107,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         gates=gates, git_sha=_git_sha(), manifest_hash=_manifest_hash(args.data_root),
         holdout_window=(variant.gates["oos"]["holdout_start"], variant.gates["oos"]["holdout_end"]),
         generated_at=datetime.now(timezone.utc),
+        variant_trades=v_trades,
     )
     print(f"[saved] {args.output}")
     return 0

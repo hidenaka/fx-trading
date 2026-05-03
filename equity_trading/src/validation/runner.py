@@ -48,13 +48,16 @@ def _collect_trades(cfg: VariantConfig, ctx: EvaluationContext) -> pd.DataFrame:
 def _simulate_portfolio(
     trades: pd.DataFrame, starting_equity: float,
     position_size_pct: float, max_concurrent: int,
-) -> tuple[dict, pd.DataFrame]:
+) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
     if len(trades) == 0:
-        return {"annualized_pct": 0.0, "max_dd_pct": 0.0, "sharpe": 0.0,
-                "final_equity": starting_equity}, pd.DataFrame(columns=["ts", "equity"])
+        empty_eq = pd.DataFrame(columns=["ts", "equity"])
+        empty_trades = pd.DataFrame(columns=list(trades.columns) + ["position_dollars"])
+        return ({"annualized_pct": 0.0, "max_dd_pct": 0.0, "sharpe": 0.0,
+                  "final_equity": starting_equity}, empty_eq, empty_trades)
     equity = starting_equity
     open_pos: list[dict] = []
     eq_curve = [(trades["entry_ts"].iloc[0] - pd.Timedelta(seconds=1), equity)]
+    accepted: list[dict] = []
     for _, t in trades.iterrows():
         still = []
         for p in open_pos:
@@ -66,8 +69,10 @@ def _simulate_portfolio(
         open_pos[:] = still
         if len(open_pos) >= max_concurrent or any(p["symbol"] == t["symbol"] for p in open_pos):
             continue
+        position_dollars = equity * position_size_pct
         open_pos.append({"symbol": t["symbol"], "exit_ts": t["exit_ts"],
-                          "dollars": equity * position_size_pct, "pnl_pct": t["pnl_pct"]})
+                          "dollars": position_dollars, "pnl_pct": t["pnl_pct"]})
+        accepted.append({**t.to_dict(), "position_dollars": position_dollars})
     final_close = trades["exit_ts"].max() + pd.Timedelta(seconds=1)
     for p in open_pos:
         equity += p["dollars"] * p["pnl_pct"]
@@ -88,20 +93,23 @@ def _simulate_portfolio(
 
     summary = {"annualized_pct": ann, "max_dd_pct": -max_dd, "sharpe": float(sharpe),
                 "final_equity": equity}
-    return summary, eq_df
+    accepted_df = pd.DataFrame(accepted) if accepted else pd.DataFrame(
+        columns=list(trades.columns) + ["position_dollars"])
+    return summary, eq_df, accepted_df
 
 
 def run_holdout_simulation(
     cfg: VariantConfig, ctx: EvaluationContext,
-) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
+) -> tuple[dict, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Returns (summary, accepted_trades, equity_curve, all_signal_trades)."""
     trades = _collect_trades(cfg, ctx)
-    summary, equity_curve = _simulate_portfolio(
+    summary, equity_curve, accepted = _simulate_portfolio(
         trades=trades,
         starting_equity=cfg.portfolio["starting_equity_usd"],
         position_size_pct=cfg.portfolio["position_size_pct"],
         max_concurrent=cfg.portfolio["max_concurrent"],
     )
-    return summary, trades, equity_curve
+    return summary, accepted, equity_curve, trades
 
 
 from equity_trading.src.validation import internal_split as _internal_split
