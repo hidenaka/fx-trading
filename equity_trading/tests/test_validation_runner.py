@@ -19,6 +19,13 @@ def _seed_data(root: Path) -> None:
                                 "volume": 1000}, index=ts)
             (root / "holdout").mkdir(parents=True, exist_ok=True)
             df.to_parquet(root / "holdout" / f"{sym}_{tf}min.parquet")
+        # Task 1 contract: load_holdout_bars(1440) reads warmup from train/.
+        # Seed a year of synthetic train daily data so the warmup tail is non-empty.
+        train_ts = pd.date_range("2023-05-01", "2024-04-30", freq="1D", tz="UTC")
+        train_df = pd.DataFrame({"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5,
+                                  "volume": 1000}, index=train_ts)
+        (root / "train").mkdir(parents=True, exist_ok=True)
+        train_df.to_parquet(root / "train" / f"{sym}_1440min.parquet")
 
 
 def _seed_variant(path: Path) -> Path:
