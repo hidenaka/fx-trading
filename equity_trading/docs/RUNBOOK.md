@@ -231,6 +231,32 @@ sqlite3 equity_trading/data/trades.sqlite \
 - **VIX > 30 局面ではポジションサイズを半分に** することを検討（任意ガード）。
 - 年率 +13% の中央値は安定収益ではない。**個別年で -10% も普通に起きる**。長期視点が必要。
 
+## Weekly live evaluation (post-deployment)
+
+Every Friday after EOD, run:
+
+```
+python3 equity_trading/scripts/compare_live_vs_backtest.py \
+    --variant equity_trading/configs/orb_default_v0.yaml
+```
+
+The script writes `equity_trading/phase0/live_vs_backtest_YYYY-MM-DD.md` with one row
+per (strategy, symbol). Each row carries one of:
+
+- `INSUFFICIENT_SAMPLE` — fewer than 30 live trades; cannot judge yet.
+- `WITHIN_EXPECTATION` — live WR within ±10pt of backtest expectation AND
+  live avg P&L 95% CI upper bound covers backtest expectation.
+- `DIVERGENCE_AVG` — live avg P&L 95% CI is entirely below the backtest
+  expectation. The strategy may not generalize to current regime.
+- `DIVERGENCE_WR` — live WR more than 10 percentage points off expectation.
+- `UNEXPECTED_PAIR` — live trades on a (strategy, symbol) not in the variant
+  config (likely a stale strategy left in the bot).
+
+**Decision rule**: if a (strategy, symbol) shows `DIVERGENCE_*` for **two
+consecutive weeks AND n ≥ 30**, halt that pair (comment it out of the
+variant config) and run `run_phase0_diagnostic.py` for that pair to
+diagnose root cause.
+
 ## When to evaluate
 
 4-12 週運用したら以下と比較:
