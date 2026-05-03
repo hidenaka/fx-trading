@@ -40,8 +40,12 @@ Re-compute with: `PYTHONPATH=. python3 equity_trading/scripts/compute_correlatio
 | UPRO | 0.75 | 0.92 | 0.81 | 1.00 | 0.91 |
 | UDOW | 0.66 | 0.78 | 0.76 | 0.91 | 1.00 |
 
-Off-diagonal values are typically > 0.7 daily and > 0.85 in 5min bars.
-TECL/TQQQ are near 0.95 (both QQQ-anchored).
+Off-diagonal daily values cluster 0.67–0.90; 5min values 0.58–0.92.
+The tightest pair is UPRO/TQQQ (daily 0.90, 5min 0.92) — both broad-cap
+US growth indices. TECL is a sector slice (XLK) so its daily correlation
+to the other 3x ETFs is 0.67–0.82, slightly lower than the rest.
+**No off-diagonal is below 0.58** — there is no meaningful diversification
+between any two of these symbols in either timeframe.
 
 ## 3. Volatility drag (3x ETF math)
 
