@@ -22,6 +22,30 @@
 > -4.96%/yr → +6.70%/yr に改善する効果がありました。`--pre-fomc` CLI は
 > コードとしては残しますが、**敏腕モード v2 では使用しません**.
 
+## 2026-05-04 Phase A search outcome
+
+Post-warmup-fix baseline (`orb_default_v0`) holdout was -22.60%/yr / -42.02% MaxDD,
+prompting Phase A variant search per
+`docs/superpowers/specs/2026-05-04-strategy-rethink-design.md`.
+
+**Step 1 (6 candidates) result**: see
+`equity_trading/phase0/phase_a_search_2026-05-04.md`. **0 candidates pass**
+the survival threshold (ann ≥ -3%/yr, MaxDD ≤ 20%, worst trade ≤ 5%,
+Sharpe ≥ -0.3) on internal valid2 (2022-01 → 2024-04).
+
+Best variant: `orb_default_v0_capped_size12_vix22` (ann -9.70%/yr,
+MaxDD -21.12%, worst -5.10%, Sharpe -3.16, 797 trades). Catastrophic
+stop and 12.5% sizing reduce magnitude but cannot close the gap to
+positive expectancy in the 2022 hike-cycle regime.
+
+**Holdout test of winner**: skipped (Task 8 condition not met — no
+candidate passed valid2).
+
+**Deploy candidate**: none. **Next step** per spec §8: escalate to
+Phase A step 2 (12 candidates with target_mult ∈ {1.0, 1.5}), then
+step 3 (24 with daily_halt_pct), or open Phase B brainstorm if
+step 2/3 also produce 0 passers.
+
 ## What this bot does
 
 Runs scheduled jobs against Alpaca **Paper** account using **3x leveraged ETFs**:
