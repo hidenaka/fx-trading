@@ -6,10 +6,10 @@
 |---|---:|---:|---:|---:|---:|:---:|
 | orb_default_v0_capped | -21.37% | -42.82% | -5.10% | -2.71 | 940 | ❌ ann/MaxDD/worst/Sharpe |
 | orb_default_v0_capped_concur1 | -13.58% | -28.80% | -5.10% | -2.71 | 940 | ❌ ann/MaxDD/worst/Sharpe |
-| orb_default_v0_capped_concur1_vix22 | -13.58% | -28.80% | -5.10% | -2.71 | 940 | ❌ ann/MaxDD/worst/Sharpe |
+| orb_default_v0_capped_concur1_vix22 | -11.42% | -24.60% | -5.10% | -3.16 | 797 | ❌ ann/MaxDD/worst/Sharpe |
 | orb_default_v0_capped_size12 | -11.26% | -24.26% | -5.10% | -2.71 | 940 | ❌ ann/MaxDD/worst/Sharpe |
-| orb_default_v0_capped_size12_vix22 | -11.26% | -24.26% | -5.10% | -2.71 | 940 | ❌ ann/MaxDD/worst/Sharpe |
-| orb_default_v0_capped_vix22 | -21.37% | -42.82% | -5.10% | -2.71 | 940 | ❌ ann/MaxDD/worst/Sharpe |
+| orb_default_v0_capped_size12_vix22 | -9.70% | -21.12% | -5.10% | -3.16 | 797 | ❌ ann/MaxDD/worst/Sharpe |
+| orb_default_v0_capped_vix22 | -18.54% | -37.93% | -5.10% | -3.16 | 797 | ❌ ann/MaxDD/worst/Sharpe |
 
 ## No candidate passes
 
