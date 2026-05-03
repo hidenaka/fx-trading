@@ -119,3 +119,77 @@ def test_orb_compute_exit_levels_overridable_via_params():
     # Target = 100.5 + 2.0  * 0.5 = 101.5
     assert stop == pytest.approx(100.125, abs=1e-6)
     assert target == pytest.approx(101.5, abs=1e-6)
+
+
+def test_orb_vix_filter_suppresses_signals_on_high_vix_days():
+    """With vix_halve_threshold=22.0, signals on synthetic high-VIX days are zero."""
+    from equity_trading.src.strategy.strategies.opening_range_breakout import (
+        OpeningRangeBreakoutStrategy,
+    )
+    import pandas as pd
+    import numpy as np
+
+    # 2 trading days × 78 bars (full RTH session) of 5-min data
+    day1_idx = pd.date_range("2024-01-02 14:30", periods=78, freq="5min", tz="UTC")
+    day2_idx = pd.date_range("2024-01-03 14:30", periods=78, freq="5min", tz="UTC")
+    idx = day1_idx.union(day2_idx)
+    closes = np.concatenate([
+        np.linspace(100, 105, 78),  # day 1: rising → breakout
+        np.linspace(100, 105, 78),  # day 2: rising → breakout
+    ])
+    bars = pd.DataFrame({
+        "open": closes, "high": closes + 0.5, "low": closes - 0.5,
+        "close": closes, "volume": [10000] * len(closes),
+    }, index=idx)
+    daily = pd.DataFrame({
+        "close": [100.0] * 250 + [102.0, 103.0],
+    }, index=pd.date_range("2023-04-01", periods=252, freq="1D", tz="UTC"))
+    # Synthetic VIX: day 1 close = 30 (HIGH), day 2 close = 15 (LOW)
+    vix = pd.DataFrame({
+        "close": [30.0, 15.0],
+    }, index=pd.to_datetime(["2024-01-02", "2024-01-03"], utc=True))
+
+    s = OpeningRangeBreakoutStrategy()
+    sig_unfiltered = s.compute_entry_signal(bars, daily, atr_pct=0.5, params={
+        "or_window_bars": 12,
+    })
+    sig_filtered = s.compute_entry_signal(bars, daily, atr_pct=0.5, params={
+        "or_window_bars": 12,
+        "vix_halve_threshold": 22.0,
+        "_vix_daily": vix,
+    })
+    # Map signals back to NY date to count by day.
+    ny_dates = bars.index.tz_convert("America/New_York").date
+    day1_idx_mask = pd.Series(ny_dates == ny_dates[0], index=bars.index)
+    day2_idx_mask = pd.Series(ny_dates == ny_dates[-1], index=bars.index)
+    # Day 1: VIX 30 > 22 → all signals suppressed
+    assert sig_filtered[day1_idx_mask].sum() == 0
+    # Day 2: VIX 15 < 22 → signal preserved
+    assert sig_filtered[day2_idx_mask].sum() == sig_unfiltered[day2_idx_mask].sum()
+
+
+def test_orb_vix_threshold_omitted_unchanged():
+    """vix_halve_threshold not in params → identical to pre-change behavior."""
+    from equity_trading.src.strategy.strategies.opening_range_breakout import (
+        OpeningRangeBreakoutStrategy,
+    )
+    import pandas as pd
+    import numpy as np
+    idx = pd.date_range("2024-01-02 14:30", periods=78, freq="5min", tz="UTC")
+    closes = np.linspace(100, 105, 78)
+    bars = pd.DataFrame({
+        "open": closes, "high": closes + 0.5, "low": closes - 0.5,
+        "close": closes, "volume": [10000] * 78,
+    }, index=idx)
+    daily = pd.DataFrame({
+        "close": [100.0] * 250 + [102.0],
+    }, index=pd.date_range("2023-04-01", periods=251, freq="1D", tz="UTC"))
+    s = OpeningRangeBreakoutStrategy()
+    sig_a = s.compute_entry_signal(bars, daily, atr_pct=0.5, params={"or_window_bars": 12})
+    sig_b = s.compute_entry_signal(bars, daily, atr_pct=0.5, params={
+        "or_window_bars": 12,
+        "vix_halve_threshold": 22.0,
+        # _vix_daily intentionally absent
+    })
+    # No VIX data → silent no-op, signals identical
+    assert (sig_a == sig_b).all()

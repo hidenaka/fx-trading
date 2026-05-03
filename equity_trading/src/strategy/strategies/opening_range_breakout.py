@@ -58,6 +58,17 @@ class OpeningRangeBreakoutStrategy(TradingStrategy):
         ).fillna(False)
 
         signal = first_breakout & daily_above_ma
+
+        vix_halve_threshold = params.get("vix_halve_threshold")
+        if vix_halve_threshold is not None and "_vix_daily" in params:
+            vix = params["_vix_daily"]
+            ny_date = pd.Series(
+                bars_5min.index.tz_convert("America/New_York").date,
+                index=bars_5min.index,
+            )
+            vix_dict = {ts.date(): float(c) for ts, c in vix["close"].items()}
+            vix_high_mask = ny_date.map(vix_dict).fillna(0) > vix_halve_threshold
+            signal = signal & ~vix_high_mask
         return signal.astype(bool)
 
     def compute_exit_levels(
