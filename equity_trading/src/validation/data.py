@@ -50,6 +50,8 @@ class EvaluationContext:
             df = ctx.load_holdout_bars("TECL", timeframe_minutes=5)
     """
 
+    WARMUP_DAYS_DAILY = 250  # 200d SMA + 50-day safety margin
+
     def __init__(
         self,
         root: Path | str,
@@ -72,17 +74,38 @@ class EvaluationContext:
         return False  # don't suppress exceptions
 
     def load_holdout_bars(self, symbol: str, timeframe_minutes: int) -> pd.DataFrame:
-        path = self.root / "holdout" / _parquet_filename(symbol, timeframe_minutes)
-        df = pd.read_parquet(path)
+        path_holdout = self.root / "holdout" / _parquet_filename(symbol, timeframe_minutes)
+        df_holdout = pd.read_parquet(path_holdout)
+        if timeframe_minutes == 1440:
+            df_warmup = self._load_warmup_daily(symbol)
+            df = pd.concat([df_warmup, df_holdout]).sort_index()
+            df = df[~df.index.duplicated(keep="last")]
+            self._log_access(symbol, timeframe_minutes,
+                              source="holdout+warmup",
+                              rows=len(df), warmup_rows=len(df_warmup))
+            return df
+        self._log_access(symbol, timeframe_minutes,
+                          source="holdout", rows=len(df_holdout))
+        return df_holdout
+
+    def _load_warmup_daily(self, symbol: str) -> pd.DataFrame:
+        path_train = self.root / "train" / _parquet_filename(symbol, 1440)
+        df = pd.read_parquet(path_train)
+        return df.tail(self.WARMUP_DAYS_DAILY)
+
+    def _log_access(self, symbol: str, timeframe_minutes: int, *,
+                     source: str, rows: int, warmup_rows: int | None = None) -> None:
         record = {
             "variant_id": self.variant_id,
             "reason": self.reason,
             "symbol": symbol,
             "timeframe_minutes": timeframe_minutes,
             "ts_utc": datetime.now(timezone.utc).isoformat(),
-            "rows": len(df),
+            "source": source,
+            "rows": rows,
         }
+        if warmup_rows is not None:
+            record["warmup_rows"] = warmup_rows
         self.access_log_path.parent.mkdir(parents=True, exist_ok=True)
         with self.access_log_path.open("a") as f:
             f.write(json.dumps(record) + "\n")
-        return df

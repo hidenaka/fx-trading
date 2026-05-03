@@ -69,3 +69,44 @@ def test_evaluation_context_appends_to_access_log(tmp_path):
         ctx.load_holdout_bars("TECL", timeframe_minutes=5)
     lines = log_path.read_text().strip().splitlines()
     assert len(lines) == 2  # appended, did not overwrite
+
+
+def _write_daily_parquet(path: Path, ts_start: str, n: int) -> None:
+    ts = pd.date_range(ts_start, periods=n, freq="1D", tz="UTC")
+    df = pd.DataFrame({"open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1}, index=ts)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path)
+
+
+def test_load_holdout_daily_prepends_warmup(tmp_path):
+    root = tmp_path / "prices"
+    # train: 300 daily bars ending 2024-04-30
+    _write_daily_parquet(root / "train" / "TECL_1440min.parquet", "2023-07-06", n=300)
+    # holdout: 100 daily bars starting 2024-05-01
+    _write_daily_parquet(root / "holdout" / "TECL_1440min.parquet", "2024-05-01", n=100)
+    log_path = tmp_path / "holdout_access.jsonl"
+    with EvaluationContext(root=root, variant_id="v", reason="gate:oos",
+                           access_log_path=log_path) as ctx:
+        df = ctx.load_holdout_bars("TECL", timeframe_minutes=1440)
+    # 250 warmup + 100 holdout = 350 (no duplicates expected)
+    assert len(df) == 350
+    # First row is 250 days before holdout start
+    assert df.index[0] == pd.Timestamp("2023-08-25", tz="UTC")
+    # Last row is the last holdout day
+    assert df.index[-1] == pd.Timestamp("2024-08-08", tz="UTC")
+    # Access log records the warmup
+    record = json.loads(log_path.read_text().strip().splitlines()[0])
+    assert record["source"] == "holdout+warmup"
+    assert record["warmup_rows"] == 250
+
+
+def test_load_holdout_5min_unchanged_by_warmup(tmp_path):
+    root = _setup_data_root(tmp_path)  # existing helper
+    log_path = tmp_path / "holdout_access.jsonl"
+    with EvaluationContext(root=root, variant_id="v", reason="gate:oos",
+                           access_log_path=log_path) as ctx:
+        df = ctx.load_holdout_bars("TECL", timeframe_minutes=5)
+    assert len(df) == 10  # original holdout count, no warmup
+    record = json.loads(log_path.read_text().strip().splitlines()[0])
+    assert record["source"] == "holdout"
+    assert "warmup_rows" not in record
