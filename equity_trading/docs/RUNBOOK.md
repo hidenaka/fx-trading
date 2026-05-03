@@ -17,6 +17,8 @@
 >
 > **資金前提**: 初期 ¥100,000 + 毎月 ¥50,000 の積立
 >
+> **Before any deployment, read `equity_trading/docs/risk_disclosure.md`.**
+>
 > **2026-05-02 改訂**: Pre-FOMC drift を構成から外しました。7年集計では +EV だが
 > 2024-2026 窓で WR 0/5 まで劣化しており、ポートフォリオ全体の最悪窓を
 > -4.96%/yr → +6.70%/yr に改善する効果がありました。`--pre-fomc` CLI は
