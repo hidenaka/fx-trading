@@ -122,3 +122,92 @@ def test_collect_trades_excludes_warmup_period_signals(tmp_path):
 
     assert len(result) == 2  # only the two trades on/after holdout_start
     assert (result["entry_ts"] >= holdout_start).all()
+
+
+def test_collect_trades_from_split_rejects_unknown_partition(tmp_path):
+    from equity_trading.src.validation.runner import _collect_trades_from_split
+    from equity_trading.src.validation.config import VariantConfig
+    cfg = VariantConfig(
+        variant_id="t", description="",
+        strategies=[{"class": "OpeningRangeBreakoutStrategy", "symbols": ["TECL"], "params": {}}],
+        portfolio={"position_size_pct": 0.25, "max_concurrent": 3, "starting_equity_usd": 100000},
+        gates={"oos": {"holdout_start": "2024-05-01", "holdout_end": "2026-05-01", "min_outperformance_pct": 0.0},
+                "tail_risk": {"max_single_trade_loss_pct": 5.0, "max_portfolio_dd_pct": 20.0, "max_rolling_30d_loss_pct": 10.0},
+                "sample_size": {"min_holdout_trades": 30}},
+    )
+    with pytest.raises(ValueError, match="Unknown partition"):
+        _collect_trades_from_split(cfg, tmp_path, "invalid")
+
+
+def test_collect_trades_from_split_excludes_pre_valid2_signals(monkeypatch, tmp_path):
+    """A synthetic trade with entry_ts < VALID2_START must be dropped."""
+    import equity_trading.src.validation.runner as R
+    from equity_trading.src.validation.config import VariantConfig
+    from equity_trading.src.validation.internal_split import VALID2_START
+
+    valid2_start = pd.Timestamp(VALID2_START, tz="UTC")
+    fake_trades = pd.DataFrame({
+        "entry_ts": [valid2_start - pd.Timedelta(days=30),
+                      valid2_start + pd.Timedelta(days=1),
+                      valid2_start + pd.Timedelta(days=10)],
+        "exit_ts":  [valid2_start - pd.Timedelta(days=29),
+                      valid2_start + pd.Timedelta(days=1, hours=1),
+                      valid2_start + pd.Timedelta(days=10, hours=1)],
+        "entry_price": [100.0, 100.0, 100.0],
+        "exit_price":  [101.0, 101.0, 101.0],
+        "exit_type":   ["target", "target", "target"],
+        "bars_held":   [12, 12, 12],
+        "pnl_pct":     [0.01, 0.01, 0.01],
+    })
+    monkeypatch.setattr(R, "simulate_strategy",
+                         lambda **kw: ({}, fake_trades))
+    monkeypatch.setattr(R, "analyze_atr_distribution",
+                         lambda b, period=14: {"median_pct": 0.2})
+    # Stub the internal_split loaders so we don't need parquet files.
+    import equity_trading.src.validation.internal_split as IS
+    monkeypatch.setattr(IS, "load_valid2_bars", lambda r, s, timeframe_minutes: pd.DataFrame())
+
+    cfg = VariantConfig(
+        variant_id="t", description="",
+        strategies=[{"class": "OpeningRangeBreakoutStrategy", "symbols": ["TECL"], "params": {}}],
+        portfolio={"position_size_pct": 0.25, "max_concurrent": 3, "starting_equity_usd": 100000},
+        gates={"oos": {"holdout_start": "2024-05-01", "holdout_end": "2026-05-01", "min_outperformance_pct": 0.0},
+                "tail_risk": {"max_single_trade_loss_pct": 5.0, "max_portfolio_dd_pct": 20.0, "max_rolling_30d_loss_pct": 10.0},
+                "sample_size": {"min_holdout_trades": 30}},
+    )
+    result = R._collect_trades_from_split(cfg, tmp_path, "valid2")
+    assert len(result) == 2
+    assert (result["entry_ts"] >= valid2_start).all()
+
+
+def test_collect_trades_from_split_injects_vix_daily(monkeypatch, tmp_path):
+    """vix_daily kwarg propagates into each strategy's params dict."""
+    import equity_trading.src.validation.runner as R
+    from equity_trading.src.validation.config import VariantConfig
+
+    captured_params: list[dict] = []
+
+    def _fake_simulate(**kwargs):
+        captured_params.append(dict(kwargs["params"]))
+        return ({}, pd.DataFrame(columns=["entry_ts", "exit_ts", "pnl_pct"]))
+
+    monkeypatch.setattr(R, "simulate_strategy", _fake_simulate)
+    monkeypatch.setattr(R, "analyze_atr_distribution",
+                         lambda b, period=14: {"median_pct": 0.2})
+    import equity_trading.src.validation.internal_split as IS
+    monkeypatch.setattr(IS, "load_valid2_bars", lambda r, s, timeframe_minutes: pd.DataFrame())
+
+    cfg = VariantConfig(
+        variant_id="t", description="",
+        strategies=[{"class": "OpeningRangeBreakoutStrategy", "symbols": ["TECL"], "params": {}}],
+        portfolio={"position_size_pct": 0.25, "max_concurrent": 3, "starting_equity_usd": 100000},
+        gates={"oos": {"holdout_start": "2024-05-01", "holdout_end": "2026-05-01", "min_outperformance_pct": 0.0},
+                "tail_risk": {"max_single_trade_loss_pct": 5.0, "max_portfolio_dd_pct": 20.0, "max_rolling_30d_loss_pct": 10.0},
+                "sample_size": {"min_holdout_trades": 30}},
+    )
+    fake_vix = pd.DataFrame({"close": [20.0]},
+                             index=pd.date_range("2022-01-01", periods=1, freq="1D", tz="UTC"))
+    R._collect_trades_from_split(cfg, tmp_path, "valid2", vix_daily=fake_vix)
+    assert len(captured_params) == 1
+    assert "_vix_daily" in captured_params[0]
+    assert captured_params[0]["_vix_daily"] is fake_vix
