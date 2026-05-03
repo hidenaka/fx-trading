@@ -43,3 +43,6 @@ fx_trading/dashboard/data/*.json
 
 # Temporary validation scripts
 fx_trading/scripts/validate_portfolio.py
+
+# git worktrees
+.worktrees/
