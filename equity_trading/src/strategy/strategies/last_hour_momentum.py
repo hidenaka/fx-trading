@@ -59,6 +59,13 @@ class LastHourMomentumStrategy(TradingStrategy):
         is_signal_bar = bar_pos == 0
         is_bullish_yesterday = (prev_lh_per_bar > threshold).fillna(False)
         signal = is_signal_bar & is_bullish_yesterday
+
+        vix_halve_threshold = params.get("vix_halve_threshold")
+        if vix_halve_threshold is not None and "_vix_daily" in params:
+            vix = params["_vix_daily"]
+            vix_dict = {ts.date(): float(c) for ts, c in vix["close"].items()}
+            vix_high_mask = ny_date.map(vix_dict).fillna(0) > vix_halve_threshold
+            signal = signal & ~vix_high_mask
         return signal.astype(bool)
 
     def compute_exit_levels(
