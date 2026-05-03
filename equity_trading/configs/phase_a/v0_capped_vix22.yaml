@@ -1,0 +1,30 @@
+variant_id: orb_default_v0_capped_vix22
+description: |
+  Phase A search candidate: catastrophic_stop_pct=5.0, sizing=25%×3, vix=22.
+parent_baseline: orb_default_v0
+strategies:
+  - class: OpeningRangeBreakoutStrategy
+    symbols: [TECL, TQQQ, TNA]
+    params:
+      or_window_bars: 12
+      stop_mult: 0.0
+      target_mult: 1.0
+      cost_pct: 0.10
+      catastrophic_stop_pct: 5.0
+      vix_halve_threshold: 22.0
+  - class: LastHourMomentumStrategy
+    symbols: [UPRO, UDOW]
+    params:
+      threshold: 0.003
+      _max_hold_bars: 60
+      cost_pct: 0.10
+      catastrophic_stop_pct: 5.0
+      vix_halve_threshold: 22.0
+portfolio:
+  position_size_pct: 0.25
+  max_concurrent: 3
+  starting_equity_usd: 100000
+gates:
+  oos: { holdout_start: "2024-05-01", holdout_end: "2026-05-01", min_outperformance_pct: 0.0 }
+  tail_risk: { max_single_trade_loss_pct: 5.0, max_portfolio_dd_pct: 20.0, max_rolling_30d_loss_pct: 10.0 }
+  sample_size: { min_holdout_trades: 30 }
