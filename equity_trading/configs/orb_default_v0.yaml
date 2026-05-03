@@ -31,3 +31,16 @@ gates:
     max_rolling_30d_loss_pct: 10.0
   sample_size:
     min_holdout_trades: 30
+  stress_test:
+    enabled: true
+    windows:
+      - name: covid_2020
+        start: "2020-02-15"
+        end: "2020-05-15"
+        max_dd_limit_pct: 30.0
+        worst_trade_limit_pct: 7.0
+      - name: hike_2022
+        start: "2022-01-01"
+        end: "2023-04-01"
+        max_dd_limit_pct: 25.0
+        worst_trade_limit_pct: 5.0

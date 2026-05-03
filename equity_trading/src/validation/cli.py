@@ -93,6 +93,15 @@ def main(argv: list[str] | None = None) -> int:
         min_holdout_trades=variant.gates["sample_size"]["min_holdout_trades"],
     ))
 
+    stress_cfg = variant.gates.get("stress_test", {})
+    if stress_cfg.get("enabled"):
+        from equity_trading.src.validation.gates.stress_test import run_stress_test_gate
+        gates.append(run_stress_test_gate(
+            cfg=variant, baseline_cfg=baseline,
+            train_root=args.data_root,
+            stress_windows=stress_cfg.get("windows", []),
+        ))
+
     write_validation_report(
         path=args.output, variant_id=variant.variant_id, baseline_id=baseline.variant_id,
         gates=gates, git_sha=_git_sha(), manifest_hash=_manifest_hash(args.data_root),
