@@ -45,6 +45,11 @@ def load_train_bars(
 class EvaluationContext:
     """Context manager that grants holdout-read permission while logging access.
 
+    For ``timeframe_minutes == 1440``, the returned DataFrame is prefixed with the
+    last ``WARMUP_DAYS_DAILY`` train rows so 200-day indicators are non-NaN at
+    holdout_start; callers must filter trades by holdout_start
+    (see ``runner._collect_trades``).
+
     Usage:
         with EvaluationContext(root, variant_id, reason="gate:oos") as ctx:
             df = ctx.load_holdout_bars("TECL", timeframe_minutes=5)
@@ -74,6 +79,10 @@ class EvaluationContext:
         return False  # don't suppress exceptions
 
     def load_holdout_bars(self, symbol: str, timeframe_minutes: int) -> pd.DataFrame:
+        """Read the symbol's holdout parquet. For 1440min (daily), prepend the last
+        WARMUP_DAYS_DAILY rows of the train parquet so long-window indicators are
+        warmed; for 5min, return the holdout parquet as-is. Every read is logged
+        with source ('holdout' or 'holdout+warmup') and row counts."""
         path_holdout = self.root / "holdout" / _parquet_filename(symbol, timeframe_minutes)
         df_holdout = pd.read_parquet(path_holdout)
         if timeframe_minutes == 1440:
