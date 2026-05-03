@@ -28,6 +28,11 @@ STRATEGY_REGISTRY = {
 
 REQUIRED_TOP_KEYS = {"variant_id", "strategies", "portfolio", "gates"}
 REQUIRED_GATES = {"oos", "tail_risk", "sample_size"}
+REQUIRED_INNER_KEYS = {
+    "oos": {"holdout_start", "holdout_end", "min_outperformance_pct"},
+    "tail_risk": {"max_single_trade_loss_pct", "max_portfolio_dd_pct", "max_rolling_30d_loss_pct"},
+    "sample_size": {"min_holdout_trades"},
+}
 
 
 @dataclass
@@ -65,6 +70,15 @@ def load_variant_config(path: Path | str) -> VariantConfig:
     gate_keys = set(raw["gates"].keys())
     if not REQUIRED_GATES.issubset(gate_keys):
         raise ValueError(f"{path}: gates must include {REQUIRED_GATES}, got {gate_keys}")
+    for gate_name, inner_keys in REQUIRED_INNER_KEYS.items():
+        gate_block = raw["gates"][gate_name]
+        if not isinstance(gate_block, dict):
+            raise ValueError(f"{path}: gates.{gate_name} must be a mapping, got {type(gate_block).__name__}")
+        missing_inner = inner_keys - gate_block.keys()
+        if missing_inner:
+            raise ValueError(
+                f"{path}: gates.{gate_name} missing required keys: {sorted(missing_inner)}"
+            )
     return VariantConfig(
         variant_id=raw["variant_id"],
         description=raw.get("description", ""),

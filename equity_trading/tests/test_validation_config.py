@@ -129,3 +129,69 @@ gates:
     klass = cfg.resolve_strategy_class(cfg.strategies[0]["class"])
     from equity_trading.src.strategy.strategies.opening_range_breakout import OpeningRangeBreakoutStrategy
     assert klass is OpeningRangeBreakoutStrategy
+
+
+def test_load_rejects_missing_oos_holdout_start(tmp_path):
+    body = """
+variant_id: t
+description: ""
+strategies:
+  - class: OpeningRangeBreakoutStrategy
+    symbols: [TECL]
+    params: {}
+portfolio:
+  position_size_pct: 0.25
+  max_concurrent: 3
+  starting_equity_usd: 100000
+gates:
+  oos: { holdout_end: "2026-05-01", min_outperformance_pct: 0.0 }
+  tail_risk: { max_single_trade_loss_pct: 5.0, max_portfolio_dd_pct: 20.0, max_rolling_30d_loss_pct: 10.0 }
+  sample_size: { min_holdout_trades: 30 }
+"""
+    p = _write_config(tmp_path, body)
+    with pytest.raises(ValueError, match="gates.oos missing required keys.*holdout_start"):
+        load_variant_config(p)
+
+
+def test_load_rejects_missing_tail_risk_dd(tmp_path):
+    body = """
+variant_id: t
+description: ""
+strategies:
+  - class: OpeningRangeBreakoutStrategy
+    symbols: [TECL]
+    params: {}
+portfolio:
+  position_size_pct: 0.25
+  max_concurrent: 3
+  starting_equity_usd: 100000
+gates:
+  oos: { holdout_start: "2024-05-01", holdout_end: "2026-05-01", min_outperformance_pct: 0.0 }
+  tail_risk: { max_single_trade_loss_pct: 5.0, max_rolling_30d_loss_pct: 10.0 }
+  sample_size: { min_holdout_trades: 30 }
+"""
+    p = _write_config(tmp_path, body)
+    with pytest.raises(ValueError, match="gates.tail_risk missing required keys.*max_portfolio_dd_pct"):
+        load_variant_config(p)
+
+
+def test_load_rejects_non_mapping_gate_block(tmp_path):
+    body = """
+variant_id: t
+description: ""
+strategies:
+  - class: OpeningRangeBreakoutStrategy
+    symbols: [TECL]
+    params: {}
+portfolio:
+  position_size_pct: 0.25
+  max_concurrent: 3
+  starting_equity_usd: 100000
+gates:
+  oos: "not a dict"
+  tail_risk: { max_single_trade_loss_pct: 5.0, max_portfolio_dd_pct: 20.0, max_rolling_30d_loss_pct: 10.0 }
+  sample_size: { min_holdout_trades: 30 }
+"""
+    p = _write_config(tmp_path, body)
+    with pytest.raises(ValueError, match="gates.oos must be a mapping"):
+        load_variant_config(p)
